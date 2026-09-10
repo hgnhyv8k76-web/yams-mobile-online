@@ -1,0 +1,6 @@
+Go build non exécuté complètement dans cet environnement. Lance `go mod tidy` puis `go build` sur le Mac.
+
+go: downloading github.com/gorilla/websocket v1.5.3
+go: downloading modernc.org/sqlite v1.38.2
+main.go:22:2: github.com/gorilla/websocket@v1.5.3: Get "https://proxy.golang.org/github.com/gorilla/websocket/@v/v1.5.3.zip": dial tcp: lookup proxy.golang.org on 168.63.129.16:53: read udp 172.26.39.236:50737->168.63.129.16:53: read: connection refused
+main.go:23:2: modernc.org/sqlite@v1.38.2: Get "https://proxy.golang.org/modernc.org/sqlite/@v/v1.38.2.zip": dial tcp: lookup proxy.golang.org on 168.63.129.16:53: read udp 172.26.39.236:50737->168.63.129.16:53: read: connection refused

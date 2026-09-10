@@ -1,0 +1,222 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#101728">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <link rel="manifest" href="/manifest.json">
+  <link rel="stylesheet" href="/style.css">
+  <title>Yam's Sandra d'amour</title>
+</head>
+<body>
+  <main class="app">
+    <header class="top">
+      <div>
+        <div class="eyebrow">MULTIJOUEUR • EN LIGNE • V10.2 FIX</div>
+        <h1>YAM'S SANDRA D'AMOUR <span class="titleCrown">👑</span></h1>
+      </div>
+      <div class="topActions"><span class="connectionPill" id="connectionStatus">● Hors ligne</span><button class="ghost" id="rulesBtn">Règles</button><button class="ghost" id="aboutBtn">À propos</button><button class="ghost" id="leaderBtn">Classement</button></div>
+    </header>
+
+    <section class="card lobby" id="lobby">
+      <h2>Créer ou rejoindre une partie</h2>
+
+      <label>Ton nom</label>
+      <input id="nameInput" maxlength="20" placeholder="Loïc">
+
+      <div class="profilePicker">
+        <div>
+          <label>Avatar</label>
+          <select id="avatarInput">
+            <option>🎲</option><option>❤️</option><option>😎</option><option>👑</option>
+            <option>⭐</option><option>🚀</option><option>🐱</option><option>🐶</option>
+          </select>
+        </div>
+        <div>
+          <label>Couleur</label>
+          <select id="colorInput">
+            <option value="blue">Bleu</option><option value="pink">Rose</option><option value="green">Vert</option>
+            <option value="gold">Or</option><option value="purple">Violet</option><option value="orange">Orange</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="myStats" id="myStats">
+        <div><strong id="statGames">0</strong><span>parties</span></div>
+        <div><strong id="statWins">0</strong><span>victoires</span></div>
+        <div><strong id="statBest">0</strong><span>meilleur score</span></div><div><strong id="statAvg">0</strong><span>moyenne</span></div>
+      </div>
+
+      <div class="grid2">
+        <div>
+          <label>Nombre max.</label>
+          <select id="maxPlayers">
+            <option>2</option><option>3</option><option selected>4</option><option>5</option><option>6</option>
+          </select>
+        </div>
+        <button class="primary big" id="createBtn">Créer une partie</button>
+      </div>
+
+      <div class="divider"><span>OU</span></div>
+
+      <label>Code de la partie</label>
+      <div class="joinRow">
+        <input id="codeInput" maxlength="6" placeholder="ABCD12" autocapitalize="characters">
+        <button class="primary" id="joinBtn">Rejoindre</button>
+      </div>
+
+      <button class="ghost hidden" id="resumeBtn">↩ Reprendre la partie en cours</button>
+      <p class="hint">Sur iPhone : ouvre cette page dans Safari puis “Ajouter à l’écran d’accueil”.</p>
+      <div class="creatorSignature">Créé par <strong>Loïc Bordier</strong> • 2026</div>
+    </section>
+
+    <section class="game hidden" id="game">
+      <div class="roomBar card">
+        <div>
+          <div class="label">PARTIE</div>
+          <div class="roomCode" id="roomCode">------</div>
+        </div>
+        <button id="homeBtn" class="ghost">🏠 Accueil</button>
+        <button id="leaveBtn" class="danger">Quitter</button>
+        <button id="shareBtn" class="ghost">Partager</button>
+        <button id="copyBtn" class="ghost">Copier le code</button>
+        <button id="readyBtn" class="ghost hidden">Je suis prêt</button>
+        <button id="startBtn" class="primary hidden">Démarrer</button>
+      </div>
+
+      <section class="card">
+        <div class="lobbyMeta">
+          <span id="roomRound">Manche 1</span>
+          <span id="roomSlots">0 / 0 joueurs</span>
+        </div>
+        <div class="players" id="players"></div>
+      </section>
+
+      <section class="turn card">
+        <div class="turnTop">
+          <div>
+            <div class="label">TOUR ACTUEL</div>
+            <h2 id="turnName">En attente…</h2>
+          </div>
+          <div class="rollCount" id="rollCount">0 / 3</div>
+        </div>
+
+        <div class="diceStage">
+          <div class="rollFlash hidden" id="rollFlash">LANCER !</div>
+          <div class="dice" id="dice"></div>
+        </div>
+
+        <div class="rollActions">
+          <button class="primary roll" id="rollBtn">🎲 LANCER LES DÉS</button>
+          <button class="ghost soundToggle" id="soundBtn" title="Activer ou couper le son">🔊 Son</button>
+        </div>
+        <p class="hint center">Touche un dé après le premier lancer pour le garder.</p>
+      </section>
+
+      <section class="card hidden" id="historyCard">
+        <div class="label">HISTORIQUE DES MANCHES</div>
+        <div id="matchHistory" class="matchHistory"></div>
+      </section>
+
+      <section class="card hidden" id="resultCard">
+        <div class="resultTitle" id="resultTitle">Partie terminée</div>
+        <div id="resultRanking" class="resultRanking"></div>
+        <button id="rematchBtn" class="primary hidden">🔁 Revanche avec les mêmes joueurs</button>
+      </section>
+
+      <section class="card chatCard">
+        <div class="chatHeader">
+          <div>
+            <div class="label">DISCUSSION</div>
+            <h2>Chat de la partie</h2>
+          </div>
+          <button id="clearChatBtn" class="ghost smallBtn">Masquer le chat</button>
+        </div>
+
+        <div class="chatMessages" id="chatMessages" aria-live="polite"></div>
+
+        <div class="reactionBar" id="reactionBar">
+          <button type="button" class="reactionBtn" data-reaction="❤️">❤️</button>
+          <button type="button" class="reactionBtn" data-reaction="😂">😂</button>
+          <button type="button" class="reactionBtn" data-reaction="🎲">🎲</button>
+          <button type="button" class="reactionBtn" data-reaction="👏">👏</button>
+        </div>
+        <form class="chatForm" id="chatForm">
+          <input id="chatInput" maxlength="300" placeholder="Écris un message…" autocomplete="off">
+          <button class="primary" type="submit">Envoyer</button>
+        </form>
+      </section>
+
+      <section class="card">
+        <h2>Feuille de score</h2>
+        <div class="scoreTable" id="scoreTable"></div>
+        <div class="scoreSummary" id="scoreSummary">
+          <div><span>Sous-total As → Six</span><strong id="upperSubtotal">0 / 63</strong></div>
+          <div class="bonusRow"><span>Prime à 63 points</span><strong id="upperBonus">+0</strong></div>
+          <div class="grandTotalRow"><span>Total</span><strong id="grandTotal">0</strong></div>
+        </div>
+      </section>
+    </section>
+
+
+
+    <div class="modal hidden" id="rulesModal" role="dialog" aria-modal="true" aria-labelledby="rulesTitle">
+      <div class="modalCard rulesCard">
+        <button class="modalClose" id="rulesClose" aria-label="Fermer">×</button>
+        <div class="aboutLogo">🎲</div>
+        <h2 id="rulesTitle">Règles du Yam's</h2>
+
+        <div class="ruleImportant">
+          <strong>Prime de la partie haute</strong>
+          <p>Le total des cases <b>As, Deux, Trois, Quatre, Cinq et Six</b> doit atteindre au moins <b>63 points</b>.</p>
+          <div class="bonusBig">63 points ou plus = +35 points</div>
+        </div>
+
+        <div class="rulesGrid">
+          <div><strong>Brelan</strong><span>3 dés identiques ou plus : somme des 5 dés.</span></div>
+          <div><strong>Carré</strong><span>4 dés identiques ou plus : somme des 5 dés.</span></div>
+          <div><strong>Full</strong><span>3 dés identiques + 2 dés identiques : 25 points.</span></div>
+          <div><strong>Petite suite</strong><span>4 valeurs qui se suivent : 30 points.</span></div>
+          <div><strong>Grande suite</strong><span>5 valeurs qui se suivent : 40 points.</span></div>
+          <div><strong>Yams</strong><span>5 dés identiques : 50 points.</span></div>
+          <div><strong>Chance</strong><span>Somme des 5 dés.</span></div>
+        </div>
+
+        <button class="primary" id="rulesOk">Fermer</button>
+      </div>
+    </div>
+
+    <div class="modal hidden" id="aboutModal" role="dialog" aria-modal="true" aria-labelledby="aboutTitle">
+      <div class="modalCard">
+        <button class="modalClose" id="aboutClose" aria-label="Fermer">×</button>
+        <div class="aboutLogo">🎲 ❤️</div>
+        <h2 id="aboutTitle">Yam's Sandra d'amour</h2>
+        <p class="aboutVersion">Version 10.2 FIX • Multijoueur en ligne</p>
+        <div class="aboutAuthor">Créé par <strong>Loïc Bordier</strong></div>
+        <p>Jeu multijoueur avec serveur Go, dés animés, effets de victoire, interface HTML/CSS/JavaScript, WebSocket temps réel et classement SQLite.</p>
+        <div class="techBadges"><span>Go</span><span>WebSocket</span><span>JavaScript</span><span>SQLite</span><span>PWA</span></div>
+        <button class="primary" id="aboutOk">Fermer</button>
+      </div>
+    </div>
+
+    <div class="celebration hidden" id="celebration" aria-hidden="true">
+      <div class="celebrationText" id="celebrationText">YAMS !</div>
+      <div class="confettiLayer" id="confettiLayer"></div>
+    </div>
+
+    <div class="toast" id="toast"></div>
+
+    <dialog id="leaderDialog">
+      <h2>Classement</h2>
+      <div id="leaderboard"></div>
+      <button class="primary" onclick="document.getElementById('leaderDialog').close()">Fermer</button>
+    </dialog>
+  </main>
+
+  <footer class="siteFooter">Yam's Sandra d'amour • <strong>Créé par Loïc Bordier</strong> • 2026</footer>
+
+  <script src="/app.js"></script>
+</body>
+</html>

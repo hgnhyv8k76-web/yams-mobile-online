@@ -1,0 +1,9 @@
+services:
+  - type: web
+    name: yams-mobile-online
+    runtime: docker
+    plan: free
+    healthCheckPath: /healthz
+    envVars:
+      - key: DB_PATH
+        value: /app/data/yams.db
