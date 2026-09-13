@@ -1,6 +1,9 @@
 // One audio graph for the whole session; unlocked by a real user gesture.
 const gameAudio = (() => {
   let context, master;
+  let ambientEnabled=localStorage.getItem('yamsAmbient')==='on';
+  let ambientVolume=Math.max(0,Math.min(100,Number(localStorage.getItem('yamsAmbientVolume')??25)||0));
+  let ambientNodes=[],ambientGain,ambientTimer;
   let enabled = localStorage.getItem('yamsSound') !== 'off';
   const stored = Number(localStorage.getItem('yamsVolume') ?? 55);
   let volume = Number.isFinite(stored) ? Math.max(0, Math.min(100, stored)) : 55;
@@ -8,7 +11,7 @@ const gameAudio = (() => {
     if(master) master.gain.setTargetAtTime(enabled ? volume / 100 : 0, context.currentTime, .015);
   }
   function unlock() {
-    if(!enabled) return;
+    if(!enabled && !ambientEnabled) return;
     try {
       const Audio = window.AudioContext || window.webkitAudioContext;
       if(!Audio) return;
@@ -18,8 +21,31 @@ const gameAudio = (() => {
         master.gain.value = volume / 100;
         master.connect(context.destination);
       }
-      if(context.state === 'suspended') context.resume().catch(() => {});
+      if(context.state === 'suspended') context.resume().then(syncAmbient).catch(() => {});
+      else syncAmbient();
     } catch(_) {}
+  }
+  function stopAmbient(){
+    clearInterval(ambientTimer);
+    for(const node of ambientNodes){try{node.stop();node.disconnect()}catch(_){}}
+    ambientNodes=[];
+    if(ambientGain){ambientGain.disconnect();ambientGain=null}
+  }
+  function syncAmbient(){
+    if(!ambientEnabled || !ambientVolume || document.hidden || !context || context.state!=='running'){stopAmbient();return}
+    if(ambientGain){ambientGain.gain.setTargetAtTime(ambientVolume/100*.035,context.currentTime,.15);return}
+    ambientGain=context.createGain();ambientGain.gain.value=0;ambientGain.connect(context.destination);
+    ambientGain.gain.setTargetAtTime(ambientVolume/100*.035,context.currentTime,.6);
+    const chords=[[130.81,164.81,196],[110,130.81,164.81],[87.31,130.81,174.61],[98,146.83,196]];
+    ambientNodes=chords[0].map((freq,i)=>{
+      const node=context.createOscillator();node.type='sine';node.frequency.value=freq;
+      node.connect(ambientGain);node.start();return node;
+    });
+    let chord=0;
+    ambientTimer=setInterval(()=>{
+      chord=(chord+1)%chords.length;
+      ambientNodes.forEach((node,i)=>node.frequency.setTargetAtTime(chords[chord][i],context.currentTime,.9));
+    },8000);
   }
   function tone(frequency, at, duration, level=.12, type='sine') {
     const oscillator = context.createOscillator(), gain = context.createGain();
@@ -59,10 +85,15 @@ const gameAudio = (() => {
       notes.forEach((note,i)=>tone(note,now+i*.095,kind==='victory'?.42:.16,kind==='hold'||kind==='release'?.06:.1));
     } catch(_) {}
   }
+  document.addEventListener('visibilitychange',()=>{if(document.hidden)stopAmbient();else if(context)unlock()});
   document.addEventListener('pointerdown',unlock,{capture:true,passive:true});
   document.addEventListener('keydown',unlock,{capture:true});
   return {
     play, unlock,
+    get ambientEnabled(){return ambientEnabled},
+    get ambientVolume(){return ambientVolume},
+    setAmbient(value){ambientEnabled=!!value;localStorage.setItem('yamsAmbient',value?'on':'off');if(value)unlock();else stopAmbient()},
+    setAmbientVolume(value){ambientVolume=Math.max(0,Math.min(100,Number(value)||0));localStorage.setItem('yamsAmbientVolume',String(ambientVolume));syncAmbient()},
     get volume(){return volume},
     setEnabled(value){enabled=value;sync();if(enabled)unlock()},
     setVolume(value){volume=Math.max(0,Math.min(100,Number(value)||0));localStorage.setItem('yamsVolume',String(volume));sync()}

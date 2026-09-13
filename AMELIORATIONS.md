@@ -1,4 +1,6 @@
-# Analyse et améliorations — V11.1
+# Analyse et améliorations — historique
+
+Les limites de sauvegarde et de remplacement décrites ci-dessous correspondent aux anciennes versions. Voir [la V13](NOUVEAUTES_V13.md) pour le fonctionnement actuel.
 
 ## Fiabilité des résultats — V11.1
 

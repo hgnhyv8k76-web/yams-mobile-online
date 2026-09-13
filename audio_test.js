@@ -16,7 +16,7 @@ function setup() {
   createBufferSource(){return node()}
   createBuffer(channels,length){return {getChannelData:()=>new Float32Array(length)}}
  }
- const context=vm.createContext({window:{AudioContext:Audio},document:{hidden:false,addEventListener:(name,fn)=>events[name]=fn},localStorage:{getItem:key=>storage.get(key)??null,setItem:(key,value)=>storage.set(key,value)}});
+ const context=vm.createContext({setInterval:()=>1,clearInterval:()=>{},window:{AudioContext:Audio},document:{hidden:false,addEventListener:(name,fn)=>events[name]=fn},localStorage:{getItem:key=>storage.get(key)??null,setItem:(key,value)=>storage.set(key,value)}});
  vm.runInContext(source+'\nthis.audio=gameAudio;',context);
  return {context,storage,events,audio:context.audio,contexts:()=>contexts,starts:()=>starts};
 }
@@ -34,4 +34,23 @@ test('audio unlocks once and suppresses muted, zero-volume and hidden-page sound
 test('audio gracefully handles browsers without Web Audio',()=>{
  const context=vm.createContext({window:{},document:{addEventListener(){}},localStorage:{getItem:()=>null}});
  vm.runInContext(source+'\ngameAudio.unlock();gameAudio.play("roll");',context);
+});
+
+test('ambient sound has independent volume and follows page visibility',()=>{
+ const h=setup();
+ h.audio.setEnabled(false);
+ h.audio.setAmbient(true);
+ assert.equal(h.contexts(),1);
+ assert.equal(h.starts(),3);
+ h.audio.play('score');assert.equal(h.starts(),3);
+ h.audio.setAmbientVolume(40);
+ assert.equal(h.audio.volume,55);
+ assert.equal(h.audio.ambientVolume,40);
+ h.context.document.hidden=true;h.events.visibilitychange();
+ h.context.document.hidden=false;h.events.visibilitychange();
+ assert.equal(h.starts(),6);
+ h.audio.setAmbient(false);
+ h.audio.setEnabled(true);h.audio.play('hold');
+ assert.equal(h.starts(),7);
+ assert.equal(h.storage.get('yamsAmbient'),'off');
 });

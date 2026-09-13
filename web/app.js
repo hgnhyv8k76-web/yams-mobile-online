@@ -53,7 +53,7 @@ function connect(callback){
       return;
     }
     if(msg.type === "error"){
-      if(!state) backToHome(false);
+      if(!state || /session expirée|partie expirée/.test(msg.message)) backToHome(false);
       toast(msg.message);
       return;
     }
@@ -86,7 +86,7 @@ function send(obj){
   return false;
 }
 
-function createRoom(){
+function createRoom(solo=false){
   onHomeScreen = false;
   const name = cleanName();
   resetIdentity();
@@ -95,7 +95,8 @@ function createRoom(){
     name,
     avatar:$("avatarInput").value,
     color:$("colorInput").value,
-    maxPlayers:Number($("maxPlayers").value)
+    maxPlayers:Number($("maxPlayers").value),
+    solo:solo === true, botLevel:$("botLevel").value
   }));
 }
 
@@ -165,6 +166,7 @@ function render(){
   renderResult();
   renderMatchHistory();
   renderScore(me, isMyTurn);
+  renderExtras();
 }
 
 function renderPlayers(){
@@ -174,13 +176,20 @@ function renderPlayers(){
     const total = totalScore(p.scores);
     const div = document.createElement("div");
     div.className = "player color-" + (p.color || "blue") + (p.id===myId ? " me":"") + (i===state.currentPlayer && state.started ? " current":"");
-    div.innerHTML = `
+    div.innerHTML = `<button type="button" class="playerSheet" aria-label="Consulter la feuille de ${escapeHtml(p.name)}">
       <div>
-        <div class="playerName"><span class="playerAvatar">${escapeHtml(p.avatar || "🎲")}</span><span class="online ${p.online?"":"offline"}"></span>${escapeHtml(p.name)} ${p.id===state.hostId?"👑":""}</div>
+        <div class="playerName"><span class="playerAvatar">${escapeHtml(p.avatar || "🎲")}</span><span class="online ${p.online?"":"offline"}"></span>${escapeHtml(p.name)}${p.botLevel && p.avatar!=="🤖" ? " · 🤖" : ""} ${p.id===state.hostId?"👑":""}</div>
         <div class="playerMeta">${Object.keys(p.scores).length}/13 cases • <span class="${p.ready ? "readyBadge" : "notReadyBadge"}">${state.started ? (i===state.currentPlayer ? "à son tour" : "en jeu") : p.ready ? "prêt" : "pas prêt"}</span></div>
         <div class="playerProgress" aria-hidden="true"><span style="width:${Object.keys(p.scores).length/13*100}%"></span></div>
       </div>
-      <strong>${total} pts</strong>`;
+      <strong>${total} pts</strong></button>`;
+    div.querySelector(".playerSheet").onclick=()=>showPlayerSheet(p.id);
+    if(state.hostId===myId && p.id!==myId && !p.online && !p.botLevel && !state.finished){
+      const replace=document.createElement("button"); replace.className="ghost replacePlayer";
+      replace.textContent="Remplacer par un robot";
+      replace.onclick=()=>offerReplacement(p.id);
+      div.appendChild(replace);
+    }
     box.appendChild(div);
   });
 }
@@ -350,6 +359,7 @@ function renderResult(){
     const row = document.createElement("div");
     row.className = "rankRow";
     if(i === 0 || r.score !== ranking[i-1].score) rank = i + 1;
+    row.classList.add(`place-${rank}`);
     const medal = rank===1 ? "🥇" : rank===2 ? "🥈" : rank===3 ? "🥉" : `${rank}.`;
     row.innerHTML = `<span>${medal} ${escapeHtml(r.name)}</span><strong>${r.score} pts</strong>`;
     box.appendChild(row);
@@ -696,6 +706,7 @@ function backToHome(clearSession){
   // Important: switch navigation state BEFORE closing the socket.
   // Any late WebSocket packet is therefore ignored.
   onHomeScreen = true;
+  for(const id of ["opponentDialog","replaceDialog","scoreDialog"]){if($(id).open)$(id).close()}
   clearTimeout(celebrationTimer);
   $("celebration").classList.add("hidden");
   $("rollFlash").classList.add("hidden");
@@ -745,7 +756,8 @@ function leaveGame(){
 
 $("soundVolume").addEventListener("input",e=>{gameAudio.setVolume(e.target.value);updateSoundButton()});
 $("soundVolume").addEventListener("change",()=>gameAudio.play("ready"));
-$("createBtn").onclick = createRoom;
+$("createBtn").onclick = () => createRoom(false);
+$("soloBtn").onclick = () => createRoom(true);
 $("joinBtn").onclick = joinRoom;
 $("homeBtn").onclick = () => backToHome(false);
 $("leaveBtn").onclick = leaveGame;

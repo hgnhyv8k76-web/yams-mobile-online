@@ -1,5 +1,5 @@
-const CACHE = "yams-sandra-maison-v12";
-const ASSETS = ["/", "/style.css", "/app.js", "/audio.js", "/manifest.json"];
+const CACHE = "yams-sandra-maison-v13";
+const ASSETS = ["/", "/style.css", "/app.js", "/audio.js", "/features.js", "/manifest.json"];
 self.addEventListener("install", event => {
   event.waitUntil(caches.open(CACHE).then(cache => cache.addAll(ASSETS)).then(() => self.skipWaiting()));
 });

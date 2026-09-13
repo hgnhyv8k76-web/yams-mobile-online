@@ -41,6 +41,9 @@ func (c *client) WriteJSON(v any) error {
 }
 
 type Player struct {
+	BotLevel       string         `json:"botLevel,omitempty"`
+	Assisted       bool           `json:"assisted,omitempty"`
+	BestPlay       *BestPlay      `json:"bestPlay,omitempty"`
 	ReconnectToken string         `json:"-"`
 	ID             string         `json:"id"`
 	Name           string         `json:"name"`
@@ -62,10 +65,19 @@ type ChatMessage struct {
 	SentAt   time.Time `json:"sentAt"`
 }
 
-type MatchScore struct {
-	PlayerID string `json:"playerId"`
-	Name     string `json:"name"`
+type BestPlay struct {
+	Category string `json:"category"`
 	Score    int    `json:"score"`
+	Dice     [5]int `json:"dice"`
+	Rolls    int    `json:"rolls"`
+}
+
+type MatchScore struct {
+	BestPlay *BestPlay `json:"bestPlay,omitempty"`
+	Assisted bool      `json:"assisted,omitempty"`
+	PlayerID string    `json:"playerId"`
+	Name     string    `json:"name"`
+	Score    int       `json:"score"`
 }
 
 type MatchResult struct {
@@ -106,6 +118,8 @@ type Server struct {
 }
 
 type WSMessage struct {
+	Solo       bool   `json:"solo,omitempty"`
+	BotLevel   string `json:"botLevel,omitempty"`
 	Token      string `json:"token,omitempty"`
 	Type       string `json:"type"`
 	PlayerID   string `json:"playerId,omitempty"`
@@ -165,6 +179,7 @@ func main() {
 		log.Fatal(err)
 	}
 	defer db.Close()
+	db.SetMaxOpenConns(1)
 
 	if err := initDB(db); err != nil {
 		log.Fatal(err)
@@ -176,6 +191,10 @@ func main() {
 		upgrader: websocket.Upgrader{},
 	}
 
+	if err := s.loadRooms(); err != nil {
+		log.Fatal(err)
+	}
+	go s.runBots()
 	mux := http.NewServeMux()
 	mux.HandleFunc("/ws", s.handleWS)
 	mux.HandleFunc("/api/leaderboard", s.handleLeaderboard)
@@ -197,7 +216,7 @@ func main() {
 	}
 
 	addr := ":" + port
-	log.Printf("Yam's Sandra d'amour V10 démarré sur le port %s", port)
+	log.Printf("Yam's Sandra d'amour V13 démarré sur le port %s", port)
 	log.Fatal(http.ListenAndServe(addr, logRequests(mux)))
 }
 
@@ -211,6 +230,8 @@ func initDB(db *sql.DB) error {
 		played_at DATETIME NOT NULL
 	);
 	CREATE INDEX IF NOT EXISTS idx_results_score ON results(score DESC);
+ CREATE TABLE IF NOT EXISTS saved_rooms(code TEXT PRIMARY KEY, payload BLOB NOT NULL);
+ CREATE TABLE IF NOT EXISTS recorded_rounds(code TEXT NOT NULL, round INTEGER NOT NULL, PRIMARY KEY(code,round));
 	`)
 	return err
 }
@@ -254,6 +275,25 @@ func (s *Server) handleWS(w http.ResponseWriter, r *http.Request) {
 
 	conn := &client{Conn: rawConn}
 	conn.SetReadLimit(4096)
+	conn.SetReadDeadline(time.Now().Add(45 * time.Second))
+	conn.SetPongHandler(func(string) error { return conn.SetReadDeadline(time.Now().Add(45 * time.Second)) })
+	stopped := make(chan struct{})
+	defer close(stopped)
+	go func() {
+		ticker := time.NewTicker(15 * time.Second)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-stopped:
+				return
+			case <-ticker.C:
+				if err := conn.WriteControl(websocket.PingMessage, nil, time.Now().Add(5*time.Second)); err != nil {
+					conn.Close()
+					return
+				}
+			}
+		}
+	}()
 	var room *Room
 	var playerID string
 
@@ -268,6 +308,9 @@ func (s *Server) handleWS(w http.ResponseWriter, r *http.Request) {
 				delete(room.clients, playerID)
 			}
 			room.UpdatedAt = time.Now()
+			if err := s.saveRoomLocked(room); err != nil {
+				log.Printf("sauvegarde déconnexion: %v", err)
+			}
 			room.mu.Unlock()
 			s.broadcast(room)
 		}
@@ -306,6 +349,7 @@ func (s *Server) handleWS(w http.ResponseWriter, r *http.Request) {
 				room.mu.Unlock()
 				return
 			}
+			backup := encodeRoom(room)
 			for i, p := range room.Players {
 				if p.ID == playerID {
 					room.addSystemMessage(p.Name + " a quitté la partie.")
@@ -316,8 +360,21 @@ func (s *Server) handleWS(w http.ResponseWriter, r *http.Request) {
 			delete(room.clients, playerID)
 			if room.HostID == playerID && len(room.Players) > 0 {
 				room.HostID = room.Players[0].ID
+				for _, p := range room.Players {
+					if p.BotLevel == "" {
+						room.HostID = p.ID
+						break
+					}
+				}
 			}
 			room.CurrentPlayer = 0
+			if saveErr := s.saveRoomLocked(room); saveErr != nil {
+				restoreRoom(room, backup)
+				room.clients[playerID] = conn
+				room.mu.Unlock()
+				err = saveErr
+				break
+			}
 			room.mu.Unlock()
 			_ = conn.WriteJSON(map[string]any{"type": "left"})
 			s.broadcast(room)
@@ -329,11 +386,12 @@ func (s *Server) handleWS(w http.ResponseWriter, r *http.Request) {
 			}
 			room.mu.Lock()
 			active := room.clients[playerID] == conn
-			room.mu.Unlock()
 			if !active {
+				room.mu.Unlock()
 				return
 			}
-			err = s.handleRoomAction(room, playerID, msg)
+			err = s.applyRoomActionLocked(room, playerID, msg)
+			room.mu.Unlock()
 		}
 
 		if err != nil {
@@ -393,6 +451,17 @@ func (s *Server) createRoom(conn *client, msg WSMessage) (*Room, string, error) 
 		UpdatedAt: time.Now(),
 	}
 
+	if msg.Solo {
+		level := normalizeLevel(msg.BotLevel)
+		room.MaxPlayers = 2
+		room.Players[0].Ready = true
+		room.Players = append(room.Players, newBot(level))
+		room.Started = true
+		room.addSystemMessage("Partie solo contre le robot " + levelLabel(level) + ".")
+	}
+	if err := s.saveRoomLocked(room); err != nil {
+		return nil, "", err
+	}
 	s.mu.Lock()
 	s.rooms[code] = room
 	s.mu.Unlock()
@@ -426,6 +495,7 @@ func (s *Server) joinRoom(conn *client, msg WSMessage) (*Room, string, error) {
 		name = fmt.Sprintf("Joueur %d", len(room.Players)+1)
 	}
 
+	backup := encodeRoom(room)
 	playerID := randomID()
 	room.Players = append(room.Players, &Player{
 		ID: playerID, ReconnectToken: randomID() + randomID(), Name: name, Avatar: normalizeAvatar(msg.Avatar), Color: normalizeColor(msg.Color), Scores: map[string]int{},
@@ -435,6 +505,11 @@ func (s *Server) joinRoom(conn *client, msg WSMessage) (*Room, string, error) {
 	room.UpdatedAt = time.Now()
 	room.addSystemMessage(name + " a rejoint la partie.")
 
+	if err := s.saveRoomLocked(room); err != nil {
+		restoreRoom(room, backup)
+		delete(room.clients, playerID)
+		return nil, "", err
+	}
 	sendSession(conn, room, room.playerByID(playerID))
 	go s.broadcast(room)
 	return room, playerID, nil
@@ -461,10 +536,14 @@ func (s *Server) reconnect(conn *client, msg WSMessage) (*Room, string, error) {
 		_ = previous.Close()
 	}
 	p.Online = true
+	p.BotLevel = ""
 	room.clients[p.ID] = conn
 	room.UpdatedAt = time.Now()
 	room.addSystemMessage(p.Name + " s’est reconnecté.")
 
+	if err := s.saveRoomLocked(room); err != nil {
+		log.Printf("sauvegarde reconnexion: %v", err)
+	}
 	sendSession(conn, room, p)
 	go s.broadcast(room)
 	return room, p.ID, nil
@@ -474,7 +553,39 @@ func (s *Server) handleRoomAction(room *Room, playerID string, msg WSMessage) er
 	room.mu.Lock()
 	defer room.mu.Unlock()
 
+	return s.applyRoomActionLocked(room, playerID, msg)
+}
+
+func (s *Server) applyRoomActionLocked(room *Room, playerID string, msg WSMessage) (err error) {
+	backup := encodeRoom(room)
+	defer func() {
+		if err == nil {
+			room.UpdatedAt = time.Now()
+			err = s.saveRoomLocked(room)
+		}
+		if err != nil {
+			restoreRoom(room, backup)
+		} else {
+			go s.broadcast(room)
+		}
+	}()
 	switch msg.Type {
+	case "replace":
+		if playerID != room.HostID {
+			return fmt.Errorf("seul l’hôte peut remplacer un joueur")
+		}
+		if room.Finished {
+			return fmt.Errorf("la manche est terminée")
+		}
+		p := room.playerByID(msg.PlayerID)
+		if p == nil || p.ID == playerID || p.Online || p.BotLevel != "" {
+			return fmt.Errorf("choisis un joueur déconnecté")
+		}
+		p.BotLevel = normalizeLevel(msg.BotLevel)
+		p.Assisted = true
+		p.Ready = true
+		p.Online = true
+		room.addSystemMessage(p.Name + " est temporairement remplacé par un robot. Il pourra reprendre sa place en se reconnectant.")
 	case "start":
 		if room.Started || room.Finished {
 			return fmt.Errorf("cette manche ne peut pas être démarrée")
@@ -604,6 +715,9 @@ func (s *Server) handleRoomAction(room *Room, playerID string, msg WSMessage) er
 
 		score := scoreCategory(room.Dice, msg.Category)
 		p.Scores[msg.Category] = score
+		if p.BestPlay == nil || score > p.BestPlay.Score {
+			p.BestPlay = &BestPlay{Category: msg.Category, Score: score, Dice: room.Dice, Rolls: room.Rolls}
+		}
 		if msg.Category == "Yams" && score == 50 {
 			room.addSystemMessage("🎉 " + p.Name + " vient de faire un Yams !")
 		} else {
@@ -618,12 +732,6 @@ func (s *Server) handleRoomAction(room *Room, playerID string, msg WSMessage) er
 			room.MatchHistory = append(room.MatchHistory, result)
 			if len(room.MatchHistory) > 20 {
 				room.MatchHistory = room.MatchHistory[len(room.MatchHistory)-20:]
-			}
-			for _, pp := range room.Players {
-				_, _ = s.db.Exec(
-					`INSERT INTO results(player_name,score,room_code,played_at) VALUES(?,?,?,?)`,
-					pp.Name, totalScore(pp.Scores), room.Code, time.Now(),
-				)
 			}
 		} else {
 			room.CurrentPlayer = (room.CurrentPlayer + 1) % len(room.Players)
@@ -641,7 +749,9 @@ func (s *Server) handleRoomAction(room *Room, playerID string, msg WSMessage) er
 		}
 		for _, pp := range room.Players {
 			pp.Scores = map[string]int{}
-			pp.Ready = false
+			pp.Ready = pp.BotLevel != ""
+			pp.BestPlay = nil
+			pp.Assisted = pp.BotLevel != ""
 		}
 		room.CurrentPlayer = 0
 		room.Dice = [5]int{1, 1, 1, 1, 1}
@@ -657,8 +767,6 @@ func (s *Server) handleRoomAction(room *Room, playerID string, msg WSMessage) er
 		return fmt.Errorf("action inconnue")
 	}
 
-	room.UpdatedAt = time.Now()
-	go s.broadcast(room)
 	return nil
 }
 
@@ -669,7 +777,7 @@ func (room *Room) matchResult() MatchResult {
 	var names []string
 	for _, p := range room.Players {
 		score := totalScore(p.Scores)
-		result.Players = append(result.Players, MatchScore{PlayerID: p.ID, Name: p.Name, Score: score})
+		result.Players = append(result.Players, MatchScore{PlayerID: p.ID, Name: p.Name, Score: score, BestPlay: p.BestPlay, Assisted: p.Assisted})
 		// Retained for older clients; Players is the authoritative, identity-based list.
 		result.Scores[p.Name] = score
 		if score > best {

@@ -1,10 +1,12 @@
-# Yam’s Sandra d’amour — Édition Maison V12
+# Yam’s Sandra d’amour — Édition Maison V13
 
 Créé par **Loïc Bordier** • 2026
 
 Ce dossier contient la nouvelle interface : vert profond, ivoire et doré, dés en relief, accueil redessiné, feuille de score avec jauge de prime et confirmation de score intégrée. Les corrections multijoueurs et de reconnexion sont incluses.
 
 La V12 ajoute le repérage du tour actif, la progression des joueurs, des effets sonores distincts et un volume mémorisé. Les sons sont synthétisés sur l’appareil, sans téléchargement audio. Le réglage système de réduction des animations est respecté.
+
+La V13 ajoute le solo contre trois niveaux de robot, les parties sauvegardées, le remplacement temporaire des absents, les feuilles adverses, trois thèmes, le podium et un fond sonore facultatif. Voir [les nouveautés et leurs limites](NOUVEAUTES_V13.md).
 
 ## Lancer sur Mac
 
@@ -25,7 +27,8 @@ Avec Go installé, exécuter `run_windows.bat`, puis ouvrir http://localhost:808
 
 ```bash
 go test -race ./...
-node --test app_test.js audio_test.js
+node --test app_test.js audio_test.js ui_test.js
+node --check web/features.js
 node --check web/audio.js
 node --check web/app.js
 node --check web/sw.js
@@ -36,7 +39,7 @@ node --check web/sw.js
 - [Refonte graphique V11](DESIGN_V11.md)
 - [Corrections et limites connues](AMELIORATIONS.md)
 
-Les parties en cours restent en mémoire ; un redémarrage du serveur les interrompt. Le classement utilise SQLite.
+Les parties et le classement sont enregistrés dans SQLite (`DB_PATH`, par défaut `data/yams.db`). La reprise après redémarrage exige que ce fichier soit conservé. La configuration Render actuelle ne déclare pas de disque persistant : voir [les conditions de stockage](NOUVEAUTES_V13.md).
 
 ## Site public
 

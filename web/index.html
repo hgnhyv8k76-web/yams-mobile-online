@@ -14,7 +14,7 @@
   <main class="app">
     <header class="top">
       <a class="brand" href="/" aria-label="Yam’s Sandra d’amour, accueil"><span class="brandMark" aria-hidden="true">⚄</span><span class="brandText">yam’s<span>SANDRA D’AMOUR</span></span></a>
-      <div class="topActions"><span class="connectionPill" id="connectionStatus" role="status">● Hors ligne</span><button class="ghost" id="rulesBtn">Règles</button><button class="ghost" id="aboutBtn">À propos</button><button class="ghost" id="leaderBtn">Classement <span aria-hidden="true">↗</span></button></div>
+      <div class="topActions"><span class="connectionPill" id="connectionStatus" role="status">● Hors ligne</span><button class="ghost" id="preferencesBtn">Ambiance</button><button class="ghost" id="rulesBtn">Règles</button><button class="ghost" id="aboutBtn">À propos</button><button class="ghost" id="leaderBtn">Classement <span aria-hidden="true">↗</span></button></div>
     </header>
 
     <section class="lobby" id="lobby">
@@ -30,7 +30,7 @@
           <div class="heroDie heroDieThree"><i></i><i></i><i></i><i></i><i></i></div>
           <span class="artCaption">À VOUS DE JOUER</span>
         </div>
-        <div class="heroFeatures"><span><b>02—06</b> joueurs</span><span><b>13</b> combinaisons</span><span><b>∞</b> revanches</span></div>
+        <div class="heroFeatures"><span><b>01—06</b> joueurs</span><span><b>13</b> combinaisons</span><span><b>∞</b> revanches</span></div>
       </div>
       <div class="lobbyPanel card">
       <div class="panelHeading"><span class="eyebrow">VOTRE PROCHAINE PARTIE</span><span class="panelSymbol" aria-hidden="true">✳</span></div>
@@ -73,6 +73,11 @@
         <button class="primary big" id="createBtn">Créer la table <span aria-hidden="true">↗</span></button>
       </div>
 
+      <div class="soloPanel">
+        <label for="botLevel">Un adversaire, même en solo</label>
+        <div class="joinRow"><select id="botLevel"><option value="easy">Robot facile</option><option value="medium" selected>Robot normal</option><option value="hard">Robot difficile</option></select><button id="soloBtn" class="primary">Jouer en solo</button></div>
+        <p class="hint">Le robot joue ses propres dés. Tu commences.</p>
+      </div>
       <div class="divider"><span>DÉJÀ INVITÉ ?</span></div>
 
       <label for="codeInput">Code de la partie</label>
@@ -134,11 +139,13 @@
 
       <section class="card hidden" id="historyCard">
         <div class="label">HISTORIQUE DES MANCHES</div>
-        <div id="matchHistory" class="matchHistory"></div>
+        <div id="matchHistory" class="matchHistory"></div><div id="scoreEvolution" class="scoreEvolution"></div>
       </section>
 
       <section class="card hidden" id="resultCard">
         <div class="resultTitle" id="resultTitle">Partie terminée</div>
+        <div id="resultPodium" class="resultPodium" aria-label="Podium de la manche"></div>
+        <div id="resultHighlights" class="resultHighlights"></div>
         <div id="resultRanking" class="resultRanking"></div>
         <button id="rematchBtn" class="primary hidden">🔁 Revanche avec les mêmes joueurs</button>
       </section>
@@ -236,6 +243,28 @@
         <div class="confirmActions"><button class="ghost" value="cancel">Continuer à jouer</button><button class="primary" id="confirmScoreBtn" value="confirm">Valider le score</button></div>
       </form>
     </dialog>
+    <dialog id="opponentDialog" aria-labelledby="opponentTitle">
+      <form method="dialog"><button class="dialogDismiss ghost" aria-label="Fermer la feuille">Fermer</button></form>
+      <div class="eyebrow">FEUILLE DU JOUEUR · CONSULTATION</div><h2 id="opponentTitle"></h2>
+      <div id="opponentScores"></div>
+    </dialog>
+    <dialog id="replaceDialog" aria-labelledby="replaceTitle">
+      <form method="dialog"><h2 id="replaceTitle">Confier la place à un robot ?</h2><p id="replaceDescription"></p>
+      <label for="replacementLevel">Niveau du robot</label><select id="replacementLevel"><option value="easy">Facile</option><option value="medium" selected>Normal</option><option value="hard">Difficile</option></select>
+      <p class="hint">Le joueur récupérera sa place à sa reconnexion. Sa feuille assistée restera dans l’historique, mais ne sera pas ajoutée au classement global.</p>
+      <div class="confirmActions"><button class="ghost" value="cancel">Annuler</button><button class="primary" id="replaceConfirm" value="confirm">Confier au robot</button></div></form>
+    </dialog>
+    <dialog id="preferencesDialog" aria-labelledby="preferencesTitle">
+      <form method="dialog"><button class="dialogDismiss ghost">Fermer</button></form>
+      <div class="eyebrow">TA TABLE, TON AMBIANCE</div><h2 id="preferencesTitle">À ton goût</h2>
+      <p>Ces réglages sont conservés sur cet appareil.</p>
+      <label for="tableTheme">Thème de la table</label><select id="tableTheme"><option value="green">Tapis vert</option><option value="night">Bleu nuit</option><option value="wood">Bois chaleureux</option></select>
+      <label for="diceColor">Couleur des dés</label><select id="diceColor"><option value="ivory">Ivoire</option><option value="sky">Bleu glacier</option><option value="rose">Rose poudré</option></select>
+      <div class="themePreview" aria-hidden="true"><span>⚄</span><span>⚂</span><span>⚅</span></div>
+      <button id="ambientBtn" class="ghost" type="button" aria-pressed="false">Activer le fond sonore</button>
+      <label for="ambientVolume">Volume du fond sonore</label><div class="audioSettings"><span aria-hidden="true">♫</span><input id="ambientVolume" type="range" min="0" max="100" step="5" value="25"><output id="ambientVolumeValue" for="ambientVolume">25 %</output></div>
+      <p class="hint">Accords doux, indépendants des effets du jeu. Le fond sonore s’arrête lorsque la page est masquée.</p>
+    </dialog>
     <dialog id="leaderDialog">
       <h2>Classement</h2>
       <div id="leaderboard"></div>
@@ -247,5 +276,6 @@
 
   <script src="/audio.js"></script>
   <script src="/app.js"></script>
+  <script src="/features.js"></script>
 </body>
 </html>
