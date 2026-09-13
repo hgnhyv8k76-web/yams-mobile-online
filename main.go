@@ -2,6 +2,7 @@ package main
 
 import (
 	"crypto/rand"
+	"crypto/subtle"
 	"database/sql"
 	"embed"
 	"encoding/hex"
@@ -26,17 +27,31 @@ import (
 //go:embed web/*
 var webFS embed.FS
 
+// A websocket permits only one concurrent writer.
+type client struct {
+	*websocket.Conn
+	writeMu sync.Mutex
+}
+
+func (c *client) WriteJSON(v any) error {
+	c.writeMu.Lock()
+	defer c.writeMu.Unlock()
+	_ = c.SetWriteDeadline(time.Now().Add(5 * time.Second))
+	return c.Conn.WriteJSON(v)
+}
+
 type Player struct {
-	ID         string         `json:"id"`
-	Name       string         `json:"name"`
-	Avatar     string         `json:"avatar"`
-	Color      string         `json:"color"`
-	Scores     map[string]int `json:"scores"`
-	JoinedAt   time.Time      `json:"joinedAt"`
-	Online     bool           `json:"online"`
-	Ready      bool           `json:"ready"`
-	LastChatAt time.Time      `json:"-"`
-	LastRollAt time.Time      `json:"-"`
+	ReconnectToken string         `json:"-"`
+	ID             string         `json:"id"`
+	Name           string         `json:"name"`
+	Avatar         string         `json:"avatar"`
+	Color          string         `json:"color"`
+	Scores         map[string]int `json:"scores"`
+	JoinedAt       time.Time      `json:"joinedAt"`
+	Online         bool           `json:"online"`
+	Ready          bool           `json:"ready"`
+	LastChatAt     time.Time      `json:"-"`
+	LastRollAt     time.Time      `json:"-"`
 }
 
 type ChatMessage struct {
@@ -47,11 +62,19 @@ type ChatMessage struct {
 	SentAt   time.Time `json:"sentAt"`
 }
 
+type MatchScore struct {
+	PlayerID string `json:"playerId"`
+	Name     string `json:"name"`
+	Score    int    `json:"score"`
+}
+
 type MatchResult struct {
-	Round   int            `json:"round"`
-	Winner  string         `json:"winner"`
-	Scores  map[string]int `json:"scores"`
-	EndedAt time.Time      `json:"endedAt"`
+	WinnerIDs []string       `json:"winnerIds"`
+	Players   []MatchScore   `json:"players"`
+	Round     int            `json:"round"`
+	Winner    string         `json:"winner"`
+	Scores    map[string]int `json:"scores"`
+	EndedAt   time.Time      `json:"endedAt"`
 }
 
 type Room struct {
@@ -70,8 +93,9 @@ type Room struct {
 	Round         int           `json:"round"`
 	MatchHistory  []MatchResult `json:"matchHistory"`
 	UpdatedAt     time.Time     `json:"updatedAt"`
-	clients       map[string]*websocket.Conn
+	clients       map[string]*client
 	mu            sync.Mutex
+	broadcastMu   sync.Mutex
 }
 
 type Server struct {
@@ -82,6 +106,7 @@ type Server struct {
 }
 
 type WSMessage struct {
+	Token      string `json:"token,omitempty"`
 	Type       string `json:"type"`
 	PlayerID   string `json:"playerId,omitempty"`
 	Name       string `json:"name,omitempty"`
@@ -146,11 +171,9 @@ func main() {
 	}
 
 	s := &Server{
-		rooms: make(map[string]*Room),
-		db:    db,
-		upgrader: websocket.Upgrader{
-			CheckOrigin: func(r *http.Request) bool { return true },
-		},
+		rooms:    make(map[string]*Room),
+		db:       db,
+		upgrader: websocket.Upgrader{},
 	}
 
 	mux := http.NewServeMux()
@@ -210,7 +233,7 @@ func (s *Server) handleLeaderboard(w http.ResponseWriter, r *http.Request) {
 		Score int    `json:"score"`
 		Date  string `json:"date"`
 	}
-	var out []row
+	out := make([]row, 0)
 	for rows.Next() {
 		var rr row
 		var t time.Time
@@ -224,22 +247,26 @@ func (s *Server) handleLeaderboard(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleWS(w http.ResponseWriter, r *http.Request) {
-	conn, err := s.upgrader.Upgrade(w, r, nil)
+	rawConn, err := s.upgrader.Upgrade(w, r, nil)
 	if err != nil {
 		return
 	}
 
+	conn := &client{Conn: rawConn}
+	conn.SetReadLimit(4096)
 	var room *Room
 	var playerID string
 
 	defer func() {
 		if room != nil && playerID != "" {
 			room.mu.Lock()
-			if p := room.playerByID(playerID); p != nil {
-				p.Online = false
-				room.addSystemMessage(p.Name + " s’est déconnecté.")
+			if room.clients[playerID] == conn {
+				if p := room.playerByID(playerID); p != nil {
+					p.Online = false
+					room.addSystemMessage(p.Name + " s’est déconnecté.")
+				}
+				delete(room.clients, playerID)
 			}
-			delete(room.clients, playerID)
 			room.UpdatedAt = time.Now()
 			room.mu.Unlock()
 			s.broadcast(room)
@@ -253,6 +280,10 @@ func (s *Server) handleWS(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
+		if room != nil && (msg.Type == "create" || msg.Type == "join" || msg.Type == "reconnect") {
+			_ = conn.WriteJSON(map[string]any{"type": "error", "message": "une connexion appartient à une seule partie"})
+			continue
+		}
 		switch msg.Type {
 		case "create":
 			room, playerID, err = s.createRoom(conn, msg)
@@ -260,10 +291,47 @@ func (s *Server) handleWS(w http.ResponseWriter, r *http.Request) {
 			room, playerID, err = s.joinRoom(conn, msg)
 		case "reconnect":
 			room, playerID, err = s.reconnect(conn, msg)
+		case "leave":
+			if room == nil {
+				err = fmt.Errorf("aucune partie à quitter")
+				break
+			}
+			room.mu.Lock()
+			if room.Started {
+				room.mu.Unlock()
+				err = fmt.Errorf("utilise Accueil pour reprendre cette manche plus tard")
+				break
+			}
+			if room.clients[playerID] != conn {
+				room.mu.Unlock()
+				return
+			}
+			for i, p := range room.Players {
+				if p.ID == playerID {
+					room.addSystemMessage(p.Name + " a quitté la partie.")
+					room.Players = append(room.Players[:i], room.Players[i+1:]...)
+					break
+				}
+			}
+			delete(room.clients, playerID)
+			if room.HostID == playerID && len(room.Players) > 0 {
+				room.HostID = room.Players[0].ID
+			}
+			room.CurrentPlayer = 0
+			room.mu.Unlock()
+			_ = conn.WriteJSON(map[string]any{"type": "left"})
+			s.broadcast(room)
+			return
 		default:
 			if room == nil || playerID == "" {
 				err = fmt.Errorf("rejoins d'abord une partie")
 				break
+			}
+			room.mu.Lock()
+			active := room.clients[playerID] == conn
+			room.mu.Unlock()
+			if !active {
+				return
 			}
 			err = s.handleRoomAction(room, playerID, msg)
 		}
@@ -272,6 +340,10 @@ func (s *Server) handleWS(w http.ResponseWriter, r *http.Request) {
 			_ = conn.WriteJSON(map[string]any{"type": "error", "message": err.Error()})
 		}
 	}
+}
+
+func sendSession(conn *client, room *Room, p *Player) {
+	_ = conn.WriteJSON(map[string]any{"type": "session", "playerId": p.ID, "token": p.ReconnectToken, "code": room.Code})
 }
 
 func normalizeAvatar(v string) string {
@@ -290,7 +362,7 @@ func normalizeColor(v string) string {
 	return "blue"
 }
 
-func (s *Server) createRoom(conn *websocket.Conn, msg WSMessage) (*Room, string, error) {
+func (s *Server) createRoom(conn *client, msg WSMessage) (*Room, string, error) {
 	name := strings.TrimSpace(msg.Name)
 	if name == "" {
 		name = "Joueur"
@@ -313,11 +385,11 @@ func (s *Server) createRoom(conn *websocket.Conn, msg WSMessage) (*Room, string,
 		MaxPlayers: maxPlayers,
 		Round:      1,
 		Players: []*Player{{
-			ID: playerID, Name: name, Avatar: normalizeAvatar(msg.Avatar), Color: normalizeColor(msg.Color), Scores: map[string]int{},
+			ID: playerID, ReconnectToken: randomID() + randomID(), Name: name, Avatar: normalizeAvatar(msg.Avatar), Color: normalizeColor(msg.Color), Scores: map[string]int{},
 			JoinedAt: time.Now(), Online: true,
 		}},
 		Dice:      [5]int{1, 1, 1, 1, 1},
-		clients:   map[string]*websocket.Conn{playerID: conn},
+		clients:   map[string]*client{playerID: conn},
 		UpdatedAt: time.Now(),
 	}
 
@@ -325,11 +397,12 @@ func (s *Server) createRoom(conn *websocket.Conn, msg WSMessage) (*Room, string,
 	s.rooms[code] = room
 	s.mu.Unlock()
 
+	sendSession(conn, room, room.playerByID(playerID))
 	s.broadcast(room)
 	return room, playerID, nil
 }
 
-func (s *Server) joinRoom(conn *websocket.Conn, msg WSMessage) (*Room, string, error) {
+func (s *Server) joinRoom(conn *client, msg WSMessage) (*Room, string, error) {
 	code := strings.ToUpper(strings.TrimSpace(msg.Code))
 	s.mu.RLock()
 	room := s.rooms[code]
@@ -341,8 +414,8 @@ func (s *Server) joinRoom(conn *websocket.Conn, msg WSMessage) (*Room, string, e
 	room.mu.Lock()
 	defer room.mu.Unlock()
 
-	if room.Started {
-		return nil, "", fmt.Errorf("la partie a déjà commencé")
+	if room.Started || room.Finished {
+		return nil, "", fmt.Errorf("attends une nouvelle manche pour rejoindre cette partie")
 	}
 	if len(room.Players) >= room.MaxPlayers {
 		return nil, "", fmt.Errorf("partie complète")
@@ -355,18 +428,19 @@ func (s *Server) joinRoom(conn *websocket.Conn, msg WSMessage) (*Room, string, e
 
 	playerID := randomID()
 	room.Players = append(room.Players, &Player{
-		ID: playerID, Name: name, Avatar: normalizeAvatar(msg.Avatar), Color: normalizeColor(msg.Color), Scores: map[string]int{},
+		ID: playerID, ReconnectToken: randomID() + randomID(), Name: name, Avatar: normalizeAvatar(msg.Avatar), Color: normalizeColor(msg.Color), Scores: map[string]int{},
 		JoinedAt: time.Now(), Online: true,
 	})
 	room.clients[playerID] = conn
 	room.UpdatedAt = time.Now()
 	room.addSystemMessage(name + " a rejoint la partie.")
 
+	sendSession(conn, room, room.playerByID(playerID))
 	go s.broadcast(room)
 	return room, playerID, nil
 }
 
-func (s *Server) reconnect(conn *websocket.Conn, msg WSMessage) (*Room, string, error) {
+func (s *Server) reconnect(conn *client, msg WSMessage) (*Room, string, error) {
 	code := strings.ToUpper(strings.TrimSpace(msg.Code))
 	s.mu.RLock()
 	room := s.rooms[code]
@@ -379,15 +453,19 @@ func (s *Server) reconnect(conn *websocket.Conn, msg WSMessage) (*Room, string, 
 	defer room.mu.Unlock()
 
 	p := room.playerByID(msg.PlayerID)
-	if p == nil {
-		return nil, "", fmt.Errorf("joueur introuvable dans cette partie")
+	if p == nil || p.ReconnectToken == "" || subtle.ConstantTimeCompare([]byte(p.ReconnectToken), []byte(msg.Token)) != 1 {
+		return nil, "", fmt.Errorf("session expirée ou invalide")
 	}
 
+	if previous := room.clients[p.ID]; previous != nil && previous != conn {
+		_ = previous.Close()
+	}
 	p.Online = true
 	room.clients[p.ID] = conn
 	room.UpdatedAt = time.Now()
 	room.addSystemMessage(p.Name + " s’est reconnecté.")
 
+	sendSession(conn, room, p)
 	go s.broadcast(room)
 	return room, p.ID, nil
 }
@@ -398,6 +476,9 @@ func (s *Server) handleRoomAction(room *Room, playerID string, msg WSMessage) er
 
 	switch msg.Type {
 	case "start":
+		if room.Started || room.Finished {
+			return fmt.Errorf("cette manche ne peut pas être démarrée")
+		}
 		if playerID != room.HostID {
 			return fmt.Errorf("seul l'hôte peut démarrer")
 		}
@@ -405,7 +486,7 @@ func (s *Server) handleRoomAction(room *Room, playerID string, msg WSMessage) er
 			return fmt.Errorf("il faut au moins 2 joueurs")
 		}
 		for _, pp := range room.Players {
-			if !pp.Ready {
+			if !pp.Ready || !pp.Online {
 				return fmt.Errorf("tous les joueurs doivent être prêts")
 			}
 		}
@@ -532,18 +613,9 @@ func (s *Server) handleRoomAction(room *Room, playerID string, msg WSMessage) er
 		if room.allFinished() {
 			room.Finished = true
 			room.Started = false
-			winner := room.Players[0]
-			for _, pp := range room.Players[1:] {
-				if totalScore(pp.Scores) > totalScore(winner.Scores) {
-					winner = pp
-				}
-			}
-			room.Winner = winner.Name
-			roundScores := map[string]int{}
-			for _, pp := range room.Players {
-				roundScores[pp.Name] = totalScore(pp.Scores)
-			}
-			room.MatchHistory = append(room.MatchHistory, MatchResult{Round: room.Round, Winner: winner.Name, Scores: roundScores, EndedAt: time.Now()})
+			result := room.matchResult()
+			room.Winner = result.Winner
+			room.MatchHistory = append(room.MatchHistory, result)
 			if len(room.MatchHistory) > 20 {
 				room.MatchHistory = room.MatchHistory[len(room.MatchHistory)-20:]
 			}
@@ -561,6 +633,9 @@ func (s *Server) handleRoomAction(room *Room, playerID string, msg WSMessage) er
 		}
 
 	case "rematch":
+		if !room.Finished {
+			return fmt.Errorf("termine la manche avant de lancer une revanche")
+		}
 		if playerID != room.HostID {
 			return fmt.Errorf("seul l'hôte peut lancer une revanche")
 		}
@@ -585,6 +660,30 @@ func (s *Server) handleRoomAction(room *Room, playerID string, msg WSMessage) er
 	room.UpdatedAt = time.Now()
 	go s.broadcast(room)
 	return nil
+}
+
+// Capture results before players leave or a rematch resets their score sheets.
+func (room *Room) matchResult() MatchResult {
+	result := MatchResult{Round: room.Round, Scores: map[string]int{}, EndedAt: time.Now()}
+	best := -1
+	var names []string
+	for _, p := range room.Players {
+		score := totalScore(p.Scores)
+		result.Players = append(result.Players, MatchScore{PlayerID: p.ID, Name: p.Name, Score: score})
+		// Retained for older clients; Players is the authoritative, identity-based list.
+		result.Scores[p.Name] = score
+		if score > best {
+			best = score
+			result.WinnerIDs = nil
+			names = nil
+		}
+		if score == best {
+			result.WinnerIDs = append(result.WinnerIDs, p.ID)
+			names = append(names, p.Name)
+		}
+	}
+	result.Winner = strings.Join(names, " & ")
+	return result
 }
 
 func (room *Room) ensureTurn(playerID string) error {
@@ -635,6 +734,8 @@ func (room *Room) allFinished() bool {
 }
 
 func (s *Server) broadcast(room *Room) {
+	room.broadcastMu.Lock()
+	defer room.broadcastMu.Unlock()
 	room.mu.Lock()
 	view := &RoomView{
 		Code:          room.Code,
@@ -657,7 +758,7 @@ func (s *Server) broadcast(room *Room) {
 		cp.Scores = copyScores(p.Scores)
 		view.Players = append(view.Players, &cp)
 	}
-	clients := make([]*websocket.Conn, 0, len(room.clients))
+	clients := make([]*client, 0, len(room.clients))
 	for _, c := range room.clients {
 		clients = append(clients, c)
 	}

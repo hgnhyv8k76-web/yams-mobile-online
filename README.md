@@ -1,71 +1,40 @@
-# Yam's Sandra d'amour — V10
+# Yam’s Sandra d’amour — Édition Maison V11
 
 Créé par **Loïc Bordier** • 2026
 
-## Nouveautés V10
+Ce dossier contient la nouvelle interface : vert profond, ivoire et doré, dés en relief, accueil redessiné, feuille de score avec jauge de prime et confirmation de score intégrée. Les corrections multijoueurs et de reconnexion sont incluses.
 
-- dés entièrement redessinés avec vrais points ;
-- animation de lancer 3D plus fluide avec rebond/tourbillon ;
-- les dés gardés restent en place et sont clairement marqués ;
-- petit son de dés généré directement par le navigateur, désactivable ;
-- vibration légère sur appareil compatible ;
-- animation YAMS plein écran avec confettis et son de victoire ;
-- indicateur de connexion ;
-- reconnexion progressive améliorée ;
-- moyenne de score dans les statistiques personnelles ;
-- correction du bouton « À propos » dupliqué en V9 ;
-- toutes les fonctions multijoueur V9 conservées.
+## Lancer sur Mac
 
-## Test local
+Depuis le Terminal :
 
 ```bash
 cd ~/Desktop/yams_mobile
-go mod tidy
-chmod +x run_mac.sh
-./run_mac.sh
+bash run_mac.sh
 ```
 
-Puis ouvrir `http://localhost:8080`.
+Ouvrir ensuite http://localhost:8080. Go doit être installé. Les fichiers web sont intégrés au programme : arrêter le serveur précédent puis relancer cette commande après une modification.
 
-## Envoi GitHub / Render
+## Lancer sur Windows
+
+Avec Go installé, exécuter `run_windows.bat`, puis ouvrir http://localhost:8080.
+
+## Vérifier
 
 ```bash
-cd ~/Desktop/yams_mobile
-go mod tidy
-git init
-git remote add origin https://github.com/hgnhyv8k76-web/yams-mobile-online.git
-git branch -M main
-git add .
-git commit -m "Yam Sandra V10 animations des"
-git push -u origin main --force
+go test -race ./...
+node --test app_test.js
+node --check web/app.js
+node --check web/sw.js
 ```
 
+## Détails
 
-## V10.1 FIX — design néon + dés 3D
+- [Refonte graphique V11](DESIGN_V11.md)
+- [Corrections et limites connues](AMELIORATIONS.md)
 
-Cette version corrige et améliore :
-- badge **En ligne** toujours visible ;
-- header responsive sans chevauchement ;
-- cartes et boutons plus arrondis ;
-- dés avec profondeur 3D plus marquée ;
-- ombre portée plus naturelle ;
-- reflets brillants ;
-- points plus gros et mieux lisibles ;
-- animation de rotation plus longue et plus crédible ;
-- petit rebond à l'arrêt ;
-- dé gardé bleu lumineux + badge `GARDÉ` ;
-- cache PWA changé en `yams-sandra-v10-1-fix`.
+Les parties en cours restent en mémoire ; un redémarrage du serveur les interrompt. Le classement utilise SQLite.
 
-La mention **Créé par Loïc Bordier** est conservée.
+## Site public
 
-
-## V10.2 FIX
-- animation des dés allégée spécialement sur téléphone ;
-- plus de redessin répété des points pendant le lancer mobile ;
-- animation principalement GPU via `transform` ;
-- son/vibration allégés sur téléphone ;
-- sous-total As à Six visible ;
-- seuil de 63 points visible ;
-- prime +35 visible et incluse dans le total ;
-- bouton Règles avec explication claire : 63 points ou plus = +35 points ;
-- cache PWA V10.2.
+Modifier ce dossier ne met pas automatiquement à jour le site Render. La publication nécessite un envoi vers le dépôt GitHub relié au service, puis un déploiement Render. Le fichier `render.yaml` décrit le service et le `Dockerfile` construit le programme avec ses fichiers web.

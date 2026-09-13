@@ -1,9 +1,9 @@
 {
-  "name": "Yam's Sandra d'amour V10.2",
+  "name": "Yam's Sandra d'amour V11",
   "short_name": "Yam's Sandra",
   "start_url": "/",
   "display": "standalone",
-  "background_color": "#0b1020",
-  "theme_color": "#101728",
+  "background_color": "#102d28",
+  "theme_color": "#102d28",
   "icons": []
 }

@@ -8,6 +8,7 @@ const categories = [
 const diceChars = ["","⚀","⚁","⚂","⚃","⚄","⚅"];
 
 let ws = null;
+let sessionToken = localStorage.getItem("yamsSessionToken") || "";
 let state = null;
 let onHomeScreen = true;
 let chatHidden = false;
@@ -17,6 +18,7 @@ let myId = localStorage.getItem("yamsPlayerId") || "";
 let roomCode = localStorage.getItem("yamsRoomCode") || "";
 let myName = localStorage.getItem("yamsName") || "";
 let rollingVisual = false;
+let pendingScore = null;
 let rollAnimationToken = 0;
 let soundEnabled = localStorage.getItem("yamsSound") !== "off";
 let reconnectAttempts = 0;
@@ -27,6 +29,7 @@ const MOBILE_DICE_MODE = window.matchMedia("(max-width: 700px), (pointer: coarse
 $("nameInput").value = myName;
 
 function connect(callback){
+  disconnectSocket();
   const proto = location.protocol === "https:" ? "wss" : "ws";
   setConnectionStatus("connecting");
   ws = new WebSocket(`${proto}://${location.host}/ws`);
@@ -38,7 +41,18 @@ function connect(callback){
   };
   ws.onmessage = (ev) => {
     const msg = JSON.parse(ev.data);
+    if(msg.type === "left"){ backToHome(true); return; }
+    if(msg.type === "session"){
+      myId = msg.playerId;
+      sessionToken = msg.token;
+      roomCode = msg.code;
+      localStorage.setItem("yamsPlayerId", myId);
+      localStorage.setItem("yamsSessionToken", sessionToken);
+      localStorage.setItem("yamsRoomCode", roomCode);
+      return;
+    }
     if(msg.type === "error"){
+      if(!state) backToHome(false);
       toast(msg.message);
       return;
     }
@@ -46,17 +60,6 @@ function connect(callback){
       if(onHomeScreen) return;
       const previousState = state;
       state = msg.room;
-      const me = state.players.find(p => p.id === myId);
-      if(!me && !myId && state.players.length){
-        // On create/join, server state arrives before a separate ID message,
-        // so infer newest matching player by name.
-        const name = $("nameInput").value.trim() || "Joueur";
-        const matches = state.players.filter(p => p.name === name);
-        if(matches.length){
-          myId = matches[matches.length-1].id;
-          localStorage.setItem("yamsPlayerId", myId);
-        }
-      }
       roomCode = state.code;
       localStorage.setItem("yamsRoomCode", roomCode);
       render();
@@ -77,7 +80,9 @@ function connect(callback){
 }
 
 function send(obj){
-  if(ws && ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify(obj));
+  if(ws && ws.readyState === WebSocket.OPEN){ ws.send(JSON.stringify(obj)); return true; }
+  toast("Connexion indisponible. Réessaie après la reconnexion.");
+  return false;
 }
 
 function createRoom(){
@@ -94,10 +99,10 @@ function createRoom(){
 }
 
 function joinRoom(){
-  onHomeScreen = false;
   const name = cleanName();
   const code = $("codeInput").value.trim().toUpperCase();
-  if(code.length < 4){ toast("Entre le code de la partie."); return; }
+  if(!/^[A-Z0-9]{6}$/.test(code)){ toast("Entre le code de la partie."); return; }
+  onHomeScreen = false;
   resetIdentity();
   connect(() => send({type:"join", code, name, avatar:$("avatarInput").value, color:$("colorInput").value}));
 }
@@ -105,7 +110,7 @@ function joinRoom(){
 function tryReconnect(){
   if(!roomCode || !myId) return;
   onHomeScreen = false;
-  connect(() => send({type:"reconnect", code:roomCode, playerId:myId}));
+  connect(() => send({type:"reconnect", code:roomCode, playerId:myId, token:sessionToken}));
 }
 
 function cleanName(){
@@ -117,6 +122,9 @@ function cleanName(){
 }
 
 function resetIdentity(){
+  state = null;
+  sessionToken = "";
+  localStorage.removeItem("yamsSessionToken");
   myId = "";
   roomCode = "";
   localStorage.removeItem("yamsPlayerId");
@@ -137,10 +145,13 @@ function render(){
 
   $("readyBtn").classList.toggle("hidden", state.started || state.finished);
   $("readyBtn").textContent = meReady ? "✓ Prêt" : "Je suis prêt";
-  $("startBtn").classList.toggle("hidden", !(isHost && !state.started && state.players.length >= 2));
-  $("startBtn").disabled = state.started;
+  $("startBtn").classList.toggle("hidden", !(isHost && !state.started && !state.finished && state.players.length >= 2));
+  $("startBtn").disabled = state.started || !state.players.every(p => p.ready && p.online);
   $("turnName").textContent = state.finished ? `🏆 ${state.winner}` : (current ? current.name : "En attente…");
   $("rollCount").textContent = `${state.rolls} / 3`;
+  $("turnLabel").textContent = state.finished ? "LA BELLE VICTOIRE" : !state.started ? "AUTOUR DE LA TABLE" : isMyTurn ? "À TOI DE JOUER" : "À SON TOUR";
+  $("turnGuidance").textContent = state.finished ? "Bravo à toute la table. On remet ça ?" : !state.started ? "Tout le monde est là ? Chaque joueur doit se déclarer prêt." : isMyTurn ? (state.rolls === 0 ? "À toi de faire parler les dés." : state.rolls >= 3 ? "Dernier lancer effectué. Choisis une case sur ta feuille." : "Garde les dés qui te plaisent, relance les autres ou marque tes points.") : `${current?.name || "Un joueur"} prépare son prochain coup. À toi bientôt !`;
+  $("rollBtn").textContent = state.rolls >= 3 ? "Choisis ton score ↓" : state.rolls > 0 ? "Relancer les dés ↻" : "Lancer les dés ↗";
   $("roomRound").textContent = `Manche ${state.round || 1}`;
   $("roomSlots").textContent = `${state.players.length} / ${state.maxPlayers} joueurs`;
   $("rollBtn").disabled = !state.started || !isMyTurn || state.rolls >= 3 || state.finished;
@@ -188,6 +199,11 @@ function buildDie(value,index,isMyTurn){
   d.className = "die" + (state.held[index] ? " held":"") + (!isMyTurn ? " disabled":"");
   d.dataset.index = String(index);
   d.setAttribute("role","button");
+  const usable = isMyTurn && state.started && state.rolls > 0 && !state.finished;
+  d.tabIndex = usable ? 0 : -1;
+  d.setAttribute("aria-disabled", String(!usable));
+  d.setAttribute("aria-pressed", String(state.held[index]));
+  d.onkeydown = e => { if(e.key === "Enter" || e.key === " "){ e.preventDefault(); d.click(); } };
   d.setAttribute("aria-label",`Dé ${index+1}, valeur ${value}${state.held[index] ? ", gardé" : ""}`);
   for(let p=0;p<9;p++){
     const pip=document.createElement("span");
@@ -196,7 +212,7 @@ function buildDie(value,index,isMyTurn){
   }
   setDieFace(d,value);
   d.onclick = () => {
-    if(rollingVisual || !isMyTurn || state.rolls===0 || state.finished) return;
+    if(rollingVisual || !usable) return;
     send({type:"hold", index, held:!state.held[index]});
   };
   return d;
@@ -292,9 +308,18 @@ function renderMatchHistory(){
     const row=document.createElement("div");row.className="historyRow";
     const left=document.createElement("div"), title=document.createElement("strong"), details=document.createElement("div");
     title.textContent=`Manche ${item.round} • ${item.winner}`; details.className="historyDetails";
-    details.textContent=Object.entries(item.scores||{}).map(([n,s])=>`${n}: ${s}`).join(" • ");
+    details.textContent=(item.players || Object.entries(item.scores||{}).map(([name,score])=>({name,score}))).map(p=>`${p.name}: ${p.score}`).join(" • ");
     left.append(title,details); const trophy=document.createElement("span");trophy.textContent="🏆"; row.append(left,trophy);box.appendChild(row);
   });
+}
+
+function finishedResult(){
+  const result = state?.matchHistory?.find(item => item.round === state.round);
+  if(result?.players && result?.winnerIds) return result;
+  // Compatibility with servers that do not yet send identity-based results.
+  const players = (state?.players || []).map(p => ({playerId:p.id, name:p.name, score:totalScore(p.scores)}));
+  const best = Math.max(...players.map(p => p.score));
+  return {players, winnerIds:players.filter(p => p.score === best).map(p => p.playerId)};
 }
 
 function renderResult(){
@@ -305,18 +330,22 @@ function renderResult(){
   }
 
   card.classList.remove("hidden");
-  $("resultTitle").textContent = `🏆 ${state.winner} gagne la manche ${state.round || 1}`;
+  const result = finishedResult();
+  const winners = result.players.filter(p => result.winnerIds.includes(p.playerId)).map(p => p.name).join(" & ");
+  $("resultTitle").textContent = result.winnerIds.length > 1
+    ? `🏆 Égalité : ${winners} • manche ${state.round || 1}`
+    : `🏆 ${winners} gagne la manche ${state.round || 1}`;
 
-  const ranking = [...state.players]
-    .map(p => ({name:p.name, score:totalScore(p.scores)}))
-    .sort((a,b)=>b.score-a.score);
+  const ranking = [...result.players].sort((a,b)=>b.score-a.score);
 
   const box = $("resultRanking");
   box.innerHTML = "";
+  let rank = 0;
   ranking.forEach((r,i)=>{
     const row = document.createElement("div");
     row.className = "rankRow";
-    const medal = i===0 ? "🥇" : i===1 ? "🥈" : i===2 ? "🥉" : `${i+1}.`;
+    if(i === 0 || r.score !== ranking[i-1].score) rank = i + 1;
+    const medal = rank===1 ? "🥇" : rank===2 ? "🥈" : rank===3 ? "🥉" : `${rank}.`;
     row.innerHTML = `<span>${medal} ${escapeHtml(r.name)}</span><strong>${r.score} pts</strong>`;
     box.appendChild(row);
   });
@@ -385,7 +414,7 @@ function sendChat(){
     return;
   }
 
-  send({type:"chat", text});
+  if(!send({type:"chat", text})) return;
   input.value = "";
   input.focus();
 }
@@ -403,15 +432,22 @@ function renderScore(me,isMyTurn){
     row.className = "scoreRow" + (used ? " used":"") + (!used && isMyTurn && state.rolls>0 ? " available":"");
 
     row.innerHTML = `
-      <div>${cat}</div>
+      <div class="categoryName"><span class="categoryIcon" aria-hidden="true">${({As:"⚀",Deux:"⚁",Trois:"⚂",Quatre:"⚃",Cinq:"⚄",Six:"⚅",Brelan:"Ⅲ",Carré:"Ⅳ",Full:"◈","Petite suite":"↗","Grande suite":"⇗",Yams:"✦",Chance:"✳"})[cat]}</span>${cat}</div>
       <div class="scoreValue">${used ? scores[cat] : "—"}</div>
       <div class="scorePotential">${used ? "✓" : (potential===null ? "—" : potential)}</div>`;
 
     if(!used && isMyTurn && state.rolls>0 && !state.finished){
+      row.setAttribute("role", "button");
+      row.tabIndex = 0;
+      row.setAttribute("aria-label", `${cat} : valider ${potential} points`);
+      row.onkeydown = e => { if(e.key === "Enter" || e.key === " "){ e.preventDefault(); row.click(); } };
       row.onclick = () => {
-        if(confirm(`Valider ${cat} pour ${potential} point(s) ?`)){
-          send({type:"score", category:cat});
-        }
+        if(rollingVisual) return;
+        pendingScore = {category:cat, code:state.code, round:state.round, rolls:state.rolls, dice:state.dice.join(",")};
+        $("scoreDialogTitle").textContent = cat;
+        $("scoreDialogValue").textContent = `${potential} point${potential === 1 ? "" : "s"}`;
+        $("scoreDialogHint").textContent = potential === 0 ? "Cette combinaison sera barrée pour cette manche. Tu confirmes ?" : "Cette case sera remplie pour le reste de la manche.";
+        $("scoreDialog").showModal();
       };
     }
     box.appendChild(row);
@@ -422,6 +458,8 @@ function renderScore(me,isMyTurn){
   const bonus = upperSubtotal >= 63 ? 35 : 0;
   const total = totalScore(scores);
 
+  $("bonusProgress").value = Math.min(upperSubtotal,63);
+  $("bonusCaption").textContent = bonus ? "Prime débloquée · +35 points" : `${63-upperSubtotal} points avant la prime`;
   $("upperSubtotal").textContent = `${upperSubtotal} / 63`;
   $("upperBonus").textContent = bonus ? "+35" : "+0";
   $("upperBonus").closest(".bonusRow")?.classList.toggle("active", bonus === 35);
@@ -481,14 +519,15 @@ function renderMyStats(){
 
 function recordMyStats(){
   if(!state?.finished || !myId) return;
-  const key=`${state.code}:${state.round || 1}`;
-  if(lastRecordedFinish===key) return;
-  const me=state.players.find(p=>p.id===myId);
+  const result=finishedResult();
+  const key=`${state.code}:${state.round || 1}:${myId}:${result.endedAt || ""}`;
+  if(lastRecordedFinish===key || lastRecordedFinish===`${state.code}:${state.round || 1}`) return;
+  const me=result.players.find(p=>p.playerId===myId);
   if(!me) return;
-  const score=totalScore(me.scores||{});
+  const score=me.score;
   const s=getMyStats();
   s.games=(s.games||0)+1;
-  s.wins=(s.wins||0)+(state.winner===me.name?1:0);
+  s.wins=(s.wins||0)+(result.winnerIds.includes(myId)?1:0);
   s.best=Math.max(s.best||0,score);
   s.totalScore=(s.totalScore||0)+score;
   localStorage.setItem("yamsPersonalStats",JSON.stringify(s));
@@ -502,7 +541,7 @@ function closeAbout(){ $("aboutModal").classList.add("hidden"); }
 
 async function shareGame(){
   if(!state) return;
-  const url = location.origin;
+  const url = `${location.origin}/?code=${encodeURIComponent(state.code)}`;
   const text = `Rejoins-moi sur Yam's Sandra d'amour ❤️\n${url}\nCode : ${state.code}\nCréé par Loïc Bordier`;
 
   try{
@@ -601,8 +640,14 @@ function playVictoryChime(){
 }
 
 async function showLeaderboard(){
+  const box = $("leaderboard");
+  box.textContent = "Chargement…";
+  if(!$("leaderDialog").open) $("leaderDialog").showModal();
+  try {
   const res = await fetch("/api/leaderboard");
-  const rows = await res.json();
+  if(!res.ok) throw new Error("Classement indisponible");
+  const payload = await res.json();
+  const rows = Array.isArray(payload) ? payload : [];
   const box = $("leaderboard");
   box.innerHTML = rows.length ? "" : "<p>Aucun score enregistré.</p>";
   rows.forEach((r,i)=>{
@@ -611,7 +656,7 @@ async function showLeaderboard(){
     div.innerHTML=`<span>${i+1}. ${escapeHtml(r.name)}</span><strong>${r.score} pts</strong>`;
     box.appendChild(div);
   });
-  $("leaderDialog").showModal();
+  } catch(_) { box.textContent = "Le classement est indisponible. Réessaie dans un instant."; }
 }
 
 function escapeHtml(s){
@@ -632,6 +677,9 @@ function updateResumeButton(){
 }
 
 function disconnectSocket(){
+  clearTimeout(reconnectTimer);
+  rollAnimationToken++;
+  rollingVisual = false;
   if(!ws) return;
   try{
     ws.onmessage = null;
@@ -661,11 +709,7 @@ function backToHome(clearSession){
   $("game").classList.add("hidden");
   $("lobby").classList.remove("hidden");
   $("codeInput").value = "";
-  window.addEventListener("online",()=>{setConnectionStatus("connecting");if(!onHomeScreen)tryReconnect();});
-window.addEventListener("offline",()=>setConnectionStatus("offline"));
-updateSoundButton();
-setConnectionStatus(navigator.onLine?"offline":"offline");
-updateResumeButton();
+  updateResumeButton();
   toast(clearSession ? "Partie quittée." : "Retour à l'accueil.");
 }
 
@@ -682,13 +726,17 @@ function resumeGame(){
   onHomeScreen = false;
   $("lobby").classList.add("hidden");
   $("game").classList.remove("hidden");
-  connect(() => send({type:"reconnect", code:roomCode, playerId:myId}));
+  connect(() => send({type:"reconnect", code:roomCode, playerId:myId, token:sessionToken}));
 }
 
 function leaveGame(){
+  if(state?.started){
+    toast("Manche en cours : utilise Accueil pour pouvoir la reprendre.");
+    return;
+  }
   const ok = confirm("Quitter cette partie définitivement et revenir à l'accueil ?");
   if(!ok) return;
-  backToHome(true);
+  send({type:"leave"});
 }
 
 
@@ -747,3 +795,20 @@ updateResumeButton();
 if(!window.__yamsV8Reactions){window.__yamsV8Reactions=true;document.querySelectorAll(".reactionBtn").forEach(btn=>btn.addEventListener("click",()=>{if(state&&!onHomeScreen)send({type:"reaction",reaction:btn.dataset.reaction});}));}
 
 loadProfileV9();
+
+window.addEventListener("online", () => { if(!onHomeScreen) tryReconnect(); });
+window.addEventListener("offline", () => setConnectionStatus("offline"));
+const invitationCode = new URLSearchParams(location.search).get("code");
+if(invitationCode && /^[A-Z0-9]{6}$/i.test(invitationCode)) $("codeInput").value = invitationCode.toUpperCase();
+updateSoundButton();
+
+$("confirmScoreBtn").addEventListener("click", () => {
+  if(!pendingScore || !state || onHomeScreen) return;
+  const pick = pendingScore;
+  if(state.code !== pick.code || state.round !== pick.round || state.rolls !== pick.rolls || state.dice.join(",") !== pick.dice || state.players[state.currentPlayer]?.id !== myId){
+    toast("Le tour a changé. Choisis à nouveau une case.");
+    return;
+  }
+  send({type:"score", category:pick.category});
+});
+$("scoreDialog").addEventListener("close", () => { pendingScore = null; });

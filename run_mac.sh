@@ -2,7 +2,7 @@
 set -e
 cd "$(dirname "$0")"
 
-echo "=== Yam's Sandra d'amour V9 — Créé par Loïc Bordier ==="
+echo "=== Yam's Sandra d'amour V11 — Édition Maison — Créé par Loïc Bordier ==="
 mkdir -p data
 
 echo "[1/2] Dépendances Go..."

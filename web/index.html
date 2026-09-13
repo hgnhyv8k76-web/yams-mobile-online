@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-  <meta name="theme-color" content="#101728">
+  <meta name="theme-color" content="#102d28">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <link rel="manifest" href="/manifest.json">
@@ -13,29 +13,43 @@
 <body>
   <main class="app">
     <header class="top">
-      <div>
-        <div class="eyebrow">MULTIJOUEUR • EN LIGNE • V10.2 FIX</div>
-        <h1>YAM'S SANDRA D'AMOUR <span class="titleCrown">👑</span></h1>
-      </div>
-      <div class="topActions"><span class="connectionPill" id="connectionStatus">● Hors ligne</span><button class="ghost" id="rulesBtn">Règles</button><button class="ghost" id="aboutBtn">À propos</button><button class="ghost" id="leaderBtn">Classement</button></div>
+      <a class="brand" href="/" aria-label="Yam’s Sandra d’amour, accueil"><span class="brandMark" aria-hidden="true">⚄</span><span class="brandText">yam’s<span>SANDRA D’AMOUR</span></span></a>
+      <div class="topActions"><span class="connectionPill" id="connectionStatus" role="status">● Hors ligne</span><button class="ghost" id="rulesBtn">Règles</button><button class="ghost" id="aboutBtn">À propos</button><button class="ghost" id="leaderBtn">Classement <span aria-hidden="true">↗</span></button></div>
     </header>
 
-    <section class="card lobby" id="lobby">
-      <h2>Créer ou rejoindre une partie</h2>
+    <section class="lobby" id="lobby">
+      <div class="hero">
+        <div class="eyebrow"><span></span> LE PLAISIR DE JOUER ENSEMBLE</div>
+        <h1>Un peu de chance.<br>Beaucoup de <em>bons moments.</em></h1>
+        <p class="heroDescription">Cinq dés, trois lancers et vos personnes préférées.<br>Installez-vous. La prochaine belle partie commence ici.</p>
+        <div class="heroArt" aria-hidden="true">
+          <div class="orbit orbitOne"></div><div class="orbit orbitTwo"></div>
+          <span class="artSpark sparkOne">✦</span><span class="artSpark sparkTwo">✧</span>
+          <div class="heroDie heroDieOne"><i></i><i></i><i></i><i></i><i></i></div>
+          <div class="heroDie heroDieTwo"><i></i><i></i><i></i><i></i><i></i></div>
+          <div class="heroDie heroDieThree"><i></i><i></i><i></i><i></i><i></i></div>
+          <span class="artCaption">À VOUS DE JOUER</span>
+        </div>
+        <div class="heroFeatures"><span><b>02—06</b> joueurs</span><span><b>13</b> combinaisons</span><span><b>∞</b> revanches</span></div>
+      </div>
+      <div class="lobbyPanel card">
+      <div class="panelHeading"><span class="eyebrow">VOTRE PROCHAINE PARTIE</span><span class="panelSymbol" aria-hidden="true">✳</span></div>
+      <h2>On se retrouve à table ?</h2>
+      <p class="panelIntro">Choisis ton profil, invite tes proches et lance les dés.</p>
 
-      <label>Ton nom</label>
-      <input id="nameInput" maxlength="20" placeholder="Loïc">
+      <label for="nameInput">Ton nom</label>
+      <input id="nameInput" maxlength="20" placeholder="Ton petit nom" autocomplete="nickname">
 
       <div class="profilePicker">
         <div>
-          <label>Avatar</label>
+          <label for="avatarInput">Avatar</label>
           <select id="avatarInput">
             <option>🎲</option><option>❤️</option><option>😎</option><option>👑</option>
             <option>⭐</option><option>🚀</option><option>🐱</option><option>🐶</option>
           </select>
         </div>
         <div>
-          <label>Couleur</label>
+          <label for="colorInput">Couleur</label>
           <select id="colorInput">
             <option value="blue">Bleu</option><option value="pink">Rose</option><option value="green">Vert</option>
             <option value="gold">Or</option><option value="purple">Violet</option><option value="orange">Orange</option>
@@ -51,25 +65,26 @@
 
       <div class="grid2">
         <div>
-          <label>Nombre max.</label>
+          <label for="maxPlayers">Nombre max.</label>
           <select id="maxPlayers">
             <option>2</option><option>3</option><option selected>4</option><option>5</option><option>6</option>
           </select>
         </div>
-        <button class="primary big" id="createBtn">Créer une partie</button>
+        <button class="primary big" id="createBtn">Créer la table <span aria-hidden="true">↗</span></button>
       </div>
 
-      <div class="divider"><span>OU</span></div>
+      <div class="divider"><span>DÉJÀ INVITÉ ?</span></div>
 
-      <label>Code de la partie</label>
+      <label for="codeInput">Code de la partie</label>
       <div class="joinRow">
-        <input id="codeInput" maxlength="6" placeholder="ABCD12" autocapitalize="characters">
+        <input id="codeInput" maxlength="6" placeholder="CODE À 6 CARACTÈRES" autocapitalize="characters">
         <button class="primary" id="joinBtn">Rejoindre</button>
       </div>
 
       <button class="ghost hidden" id="resumeBtn">↩ Reprendre la partie en cours</button>
       <p class="hint">Sur iPhone : ouvre cette page dans Safari puis “Ajouter à l’écran d’accueil”.</p>
-      <div class="creatorSignature">Créé par <strong>Loïc Bordier</strong> • 2026</div>
+      <div class="creatorSignature">Imaginé avec amour par <strong>Loïc Bordier</strong></div>
+      </div>
     </section>
 
     <section class="game hidden" id="game">
@@ -86,7 +101,7 @@
         <button id="startBtn" class="primary hidden">Démarrer</button>
       </div>
 
-      <section class="card">
+      <section class="card playersCard">
         <div class="lobbyMeta">
           <span id="roomRound">Manche 1</span>
           <span id="roomSlots">0 / 0 joueurs</span>
@@ -97,12 +112,13 @@
       <section class="turn card">
         <div class="turnTop">
           <div>
-            <div class="label">TOUR ACTUEL</div>
+            <div class="label" id="turnLabel">AUTOUR DE LA TABLE</div>
             <h2 id="turnName">En attente…</h2>
           </div>
-          <div class="rollCount" id="rollCount">0 / 3</div>
+          <div class="rollIndicator"><div class="rollCount" id="rollCount">0 / 3</div><span>LANCERS</span></div>
         </div>
 
+        <p class="turnGuidance" id="turnGuidance" aria-live="polite">La table vous attend.</p>
         <div class="diceStage">
           <div class="rollFlash hidden" id="rollFlash">LANCER !</div>
           <div class="dice" id="dice"></div>
@@ -112,7 +128,7 @@
           <button class="primary roll" id="rollBtn">🎲 LANCER LES DÉS</button>
           <button class="ghost soundToggle" id="soundBtn" title="Activer ou couper le son">🔊 Son</button>
         </div>
-        <p class="hint center">Touche un dé après le premier lancer pour le garder.</p>
+        <p class="hint center">Un toucher pour garder un dé. Un autre pour le libérer.</p>
       </section>
 
       <section class="card hidden" id="historyCard">
@@ -144,14 +160,16 @@
           <button type="button" class="reactionBtn" data-reaction="👏">👏</button>
         </div>
         <form class="chatForm" id="chatForm">
-          <input id="chatInput" maxlength="300" placeholder="Écris un message…" autocomplete="off">
+          <input aria-label="Message pour les joueurs" id="chatInput" maxlength="300" placeholder="Écris un message…" autocomplete="off">
           <button class="primary" type="submit">Envoyer</button>
         </form>
       </section>
 
-      <section class="card">
-        <h2>Feuille de score</h2>
+      <section class="card scoreCard">
+        <div class="scoreHeading"><div><div class="eyebrow">CHAQUE POINT COMPTE</div><h2>Votre feuille de score</h2></div><span aria-hidden="true">✎</span></div>
+        <div class="scoreColumns"><span>Combinaison</span><span>Score</span><span>Possible</span></div>
         <div class="scoreTable" id="scoreTable"></div>
+        <div class="bonusProgress"><div><span>En route vers la prime</span><span id="bonusCaption">63 points à atteindre</span></div><progress id="bonusProgress" max="63" value="0" aria-label="Progression vers la prime de 35 points"></progress></div>
         <div class="scoreSummary" id="scoreSummary">
           <div><span>Sous-total As → Six</span><strong id="upperSubtotal">0 / 63</strong></div>
           <div class="bonusRow"><span>Prime à 63 points</span><strong id="upperBonus">+0</strong></div>
@@ -193,7 +211,7 @@
         <button class="modalClose" id="aboutClose" aria-label="Fermer">×</button>
         <div class="aboutLogo">🎲 ❤️</div>
         <h2 id="aboutTitle">Yam's Sandra d'amour</h2>
-        <p class="aboutVersion">Version 10.2 FIX • Multijoueur en ligne</p>
+        <p class="aboutVersion">Édition Maison • V11 • Multijoueur en ligne</p>
         <div class="aboutAuthor">Créé par <strong>Loïc Bordier</strong></div>
         <p>Jeu multijoueur avec serveur Go, dés animés, effets de victoire, interface HTML/CSS/JavaScript, WebSocket temps réel et classement SQLite.</p>
         <div class="techBadges"><span>Go</span><span>WebSocket</span><span>JavaScript</span><span>SQLite</span><span>PWA</span></div>
@@ -206,8 +224,17 @@
       <div class="confettiLayer" id="confettiLayer"></div>
     </div>
 
-    <div class="toast" id="toast"></div>
+    <div class="toast" id="toast" role="status" aria-live="polite"></div>
 
+    <dialog id="scoreDialog" aria-labelledby="scoreDialogTitle">
+      <form method="dialog" class="scoreConfirm">
+        <div class="eyebrow">À INSCRIRE SUR VOTRE FEUILLE</div>
+        <h2 id="scoreDialogTitle">Valider cette combinaison ?</h2>
+        <div class="scoreConfirmValue" id="scoreDialogValue"></div>
+        <p id="scoreDialogHint">Cette case sera remplie pour le reste de la manche.</p>
+        <div class="confirmActions"><button class="ghost" value="cancel">Continuer à jouer</button><button class="primary" id="confirmScoreBtn" value="confirm">Valider le score</button></div>
+      </form>
+    </dialog>
     <dialog id="leaderDialog">
       <h2>Classement</h2>
       <div id="leaderboard"></div>
@@ -215,7 +242,7 @@
     </dialog>
   </main>
 
-  <footer class="siteFooter">Yam's Sandra d'amour • <strong>Créé par Loïc Bordier</strong> • 2026</footer>
+  <footer class="siteFooter">Une dernière partie ? <span>Yam’s Sandra d’amour · Créé par <strong>Loïc Bordier</strong> · 2026</span></footer>
 
   <script src="/app.js"></script>
 </body>
