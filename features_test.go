@@ -7,6 +7,7 @@ import (
 	"net/http/httptest"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -32,13 +33,13 @@ func durableServer(t *testing.T, path string) *Server {
 }
 func testDial(t *testing.T, s *Server) *websocket.Conn {
 	t.Helper()
-	server := httptest.NewServer(http.HandlerFunc(s.handleWS))
-	t.Cleanup(server.Close)
+	var handlers sync.WaitGroup
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { handlers.Add(1); defer handlers.Done(); s.handleWS(w, r) }))
 	conn, _, err := websocket.DefaultDialer.Dial("ws"+strings.TrimPrefix(server.URL, "http"), nil)
 	if err != nil {
 		t.Fatal(err)
 	}
-	t.Cleanup(func() { conn.Close() })
+	t.Cleanup(func() { conn.Close(); server.Close(); handlers.Wait() })
 	return conn
 }
 func readMessage(t *testing.T, c *websocket.Conn) map[string]any {

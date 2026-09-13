@@ -1,4 +1,4 @@
-# Yam’s Sandra d’amour — Édition Maison V13
+# Yam’s Sandra d’amour — Édition Maison V14
 
 Créé par **Loïc Bordier** • 2026
 
@@ -7,6 +7,8 @@ Ce dossier contient la nouvelle interface : vert profond, ivoire et doré, dés 
 La V12 ajoute le repérage du tour actif, la progression des joueurs, des effets sonores distincts et un volume mémorisé. Les sons sont synthétisés sur l’appareil, sans téléchargement audio. Le réglage système de réduction des animations est respecté.
 
 La V13 ajoute le solo contre trois niveaux de robot, les parties sauvegardées, le remplacement temporaire des absents, les feuilles adverses, trois thèmes, le podium et un fond sonore facultatif. Voir [les nouveautés et leurs limites](NOUVEAUTES_V13.md).
+
+La V14 ajoute les défis en 3/5 manches, les invitations par QR code, les réactions animées et un bouton de réactivation audio pour les mobiles. Voir [les nouveautés V14](NOUVEAUTES_V14.md).
 
 ## Lancer sur Mac
 

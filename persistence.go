@@ -42,6 +42,7 @@ func restoreRoom(room *Room, data []byte) error {
 	}
 	r := saved.Room
 	room.Code = r.Code
+	room.ChallengeRounds = r.ChallengeRounds
 	room.HostID = r.HostID
 	room.Players = r.Players
 	room.Chat = r.Chat

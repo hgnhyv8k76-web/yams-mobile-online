@@ -58,6 +58,7 @@ type Player struct {
 }
 
 type ChatMessage struct {
+	Reaction string    `json:"reaction,omitempty"`
 	ID       string    `json:"id"`
 	PlayerID string    `json:"playerId"`
 	Name     string    `json:"name"`
@@ -90,24 +91,25 @@ type MatchResult struct {
 }
 
 type Room struct {
-	Code          string        `json:"code"`
-	HostID        string        `json:"hostId"`
-	Players       []*Player     `json:"players"`
-	Chat          []ChatMessage `json:"chat"`
-	CurrentPlayer int           `json:"currentPlayer"`
-	Dice          [5]int        `json:"dice"`
-	Held          [5]bool       `json:"held"`
-	Rolls         int           `json:"rolls"`
-	Started       bool          `json:"started"`
-	Finished      bool          `json:"finished"`
-	Winner        string        `json:"winner,omitempty"`
-	MaxPlayers    int           `json:"maxPlayers"`
-	Round         int           `json:"round"`
-	MatchHistory  []MatchResult `json:"matchHistory"`
-	UpdatedAt     time.Time     `json:"updatedAt"`
-	clients       map[string]*client
-	mu            sync.Mutex
-	broadcastMu   sync.Mutex
+	ChallengeRounds int           `json:"challengeRounds,omitempty"`
+	Code            string        `json:"code"`
+	HostID          string        `json:"hostId"`
+	Players         []*Player     `json:"players"`
+	Chat            []ChatMessage `json:"chat"`
+	CurrentPlayer   int           `json:"currentPlayer"`
+	Dice            [5]int        `json:"dice"`
+	Held            [5]bool       `json:"held"`
+	Rolls           int           `json:"rolls"`
+	Started         bool          `json:"started"`
+	Finished        bool          `json:"finished"`
+	Winner          string        `json:"winner,omitempty"`
+	MaxPlayers      int           `json:"maxPlayers"`
+	Round           int           `json:"round"`
+	MatchHistory    []MatchResult `json:"matchHistory"`
+	UpdatedAt       time.Time     `json:"updatedAt"`
+	clients         map[string]*client
+	mu              sync.Mutex
+	broadcastMu     sync.Mutex
 }
 
 type Server struct {
@@ -118,22 +120,23 @@ type Server struct {
 }
 
 type WSMessage struct {
-	Solo       bool   `json:"solo,omitempty"`
-	BotLevel   string `json:"botLevel,omitempty"`
-	Token      string `json:"token,omitempty"`
-	Type       string `json:"type"`
-	PlayerID   string `json:"playerId,omitempty"`
-	Name       string `json:"name,omitempty"`
-	Avatar     string `json:"avatar,omitempty"`
-	Color      string `json:"color,omitempty"`
-	Code       string `json:"code,omitempty"`
-	Index      int    `json:"index,omitempty"`
-	Held       bool   `json:"held,omitempty"`
-	Category   string `json:"category,omitempty"`
-	Text       string `json:"text,omitempty"`
-	Ready      bool   `json:"ready,omitempty"`
-	Reaction   string `json:"reaction,omitempty"`
-	MaxPlayers int    `json:"maxPlayers,omitempty"`
+	ChallengeRounds int    `json:"challengeRounds,omitempty"`
+	Solo            bool   `json:"solo,omitempty"`
+	BotLevel        string `json:"botLevel,omitempty"`
+	Token           string `json:"token,omitempty"`
+	Type            string `json:"type"`
+	PlayerID        string `json:"playerId,omitempty"`
+	Name            string `json:"name,omitempty"`
+	Avatar          string `json:"avatar,omitempty"`
+	Color           string `json:"color,omitempty"`
+	Code            string `json:"code,omitempty"`
+	Index           int    `json:"index,omitempty"`
+	Held            bool   `json:"held,omitempty"`
+	Category        string `json:"category,omitempty"`
+	Text            string `json:"text,omitempty"`
+	Ready           bool   `json:"ready,omitempty"`
+	Reaction        string `json:"reaction,omitempty"`
+	MaxPlayers      int    `json:"maxPlayers,omitempty"`
 }
 
 type Snapshot struct {
@@ -142,20 +145,22 @@ type Snapshot struct {
 }
 
 type RoomView struct {
-	Code          string        `json:"code"`
-	HostID        string        `json:"hostId"`
-	Players       []*Player     `json:"players"`
-	Chat          []ChatMessage `json:"chat"`
-	CurrentPlayer int           `json:"currentPlayer"`
-	Dice          [5]int        `json:"dice"`
-	Held          [5]bool       `json:"held"`
-	Rolls         int           `json:"rolls"`
-	Started       bool          `json:"started"`
-	Finished      bool          `json:"finished"`
-	Winner        string        `json:"winner,omitempty"`
-	MaxPlayers    int           `json:"maxPlayers"`
-	Round         int           `json:"round"`
-	MatchHistory  []MatchResult `json:"matchHistory"`
+	ChallengeRounds int            `json:"challengeRounds,omitempty"`
+	Challenge       *ChallengeView `json:"challenge,omitempty"`
+	Code            string         `json:"code"`
+	HostID          string         `json:"hostId"`
+	Players         []*Player      `json:"players"`
+	Chat            []ChatMessage  `json:"chat"`
+	CurrentPlayer   int            `json:"currentPlayer"`
+	Dice            [5]int         `json:"dice"`
+	Held            [5]bool        `json:"held"`
+	Rolls           int            `json:"rolls"`
+	Started         bool           `json:"started"`
+	Finished        bool           `json:"finished"`
+	Winner          string         `json:"winner,omitempty"`
+	MaxPlayers      int            `json:"maxPlayers"`
+	Round           int            `json:"round"`
+	MatchHistory    []MatchResult  `json:"matchHistory"`
 }
 
 var categories = []string{
@@ -198,6 +203,7 @@ func main() {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/ws", s.handleWS)
 	mux.HandleFunc("/api/leaderboard", s.handleLeaderboard)
+	mux.HandleFunc("/api/invite-qr", s.handleInviteQR)
 	mux.HandleFunc("/healthz", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
 		w.WriteHeader(http.StatusOK)
@@ -216,7 +222,7 @@ func main() {
 	}
 
 	addr := ":" + port
-	log.Printf("Yam's Sandra d'amour V13 démarré sur le port %s", port)
+	log.Printf("Yam's Sandra d'amour V14 démarré sur le port %s", port)
 	log.Fatal(http.ListenAndServe(addr, logRequests(mux)))
 }
 
@@ -340,9 +346,9 @@ func (s *Server) handleWS(w http.ResponseWriter, r *http.Request) {
 				break
 			}
 			room.mu.Lock()
-			if room.Started {
+			if room.Started || room.challengeInProgress() {
 				room.mu.Unlock()
-				err = fmt.Errorf("utilise Accueil pour reprendre cette manche plus tard")
+				err = fmt.Errorf("utilise Accueil pour reprendre cette partie ou ce défi plus tard")
 				break
 			}
 			if room.clients[playerID] != conn {
@@ -438,10 +444,11 @@ func (s *Server) createRoom(conn *client, msg WSMessage) (*Room, string, error) 
 	code := s.newRoomCode()
 
 	room := &Room{
-		Code:       code,
-		HostID:     playerID,
-		MaxPlayers: maxPlayers,
-		Round:      1,
+		Code:            code,
+		ChallengeRounds: normalizeChallengeRounds(msg.ChallengeRounds),
+		HostID:          playerID,
+		MaxPlayers:      maxPlayers,
+		Round:           1,
 		Players: []*Player{{
 			ID: playerID, ReconnectToken: randomID() + randomID(), Name: name, Avatar: normalizeAvatar(msg.Avatar), Color: normalizeColor(msg.Color), Scores: map[string]int{},
 			JoinedAt: time.Now(), Online: true,
@@ -483,8 +490,8 @@ func (s *Server) joinRoom(conn *client, msg WSMessage) (*Room, string, error) {
 	room.mu.Lock()
 	defer room.mu.Unlock()
 
-	if room.Started || room.Finished {
-		return nil, "", fmt.Errorf("attends une nouvelle manche pour rejoindre cette partie")
+	if room.Started || room.Finished || room.challengeInProgress() {
+		return nil, "", fmt.Errorf("cette table n’accepte plus de nouveaux joueurs pour le moment")
 	}
 	if len(room.Players) >= room.MaxPlayers {
 		return nil, "", fmt.Errorf("partie complète")
@@ -665,7 +672,11 @@ func (s *Server) applyRoomActionLocked(room *Room, playerID string, msg WSMessag
 		if !allowed[msg.Reaction] {
 			return fmt.Errorf("réaction invalide")
 		}
-		room.Chat = append(room.Chat, ChatMessage{ID: randomID(), PlayerID: "system", Name: "Réaction", Text: p.Name + " " + msg.Reaction, SentAt: time.Now()})
+		if time.Since(p.LastChatAt) < 700*time.Millisecond {
+			return fmt.Errorf("attends un instant avant une autre réaction")
+		}
+		p.LastChatAt = time.Now()
+		room.Chat = append(room.Chat, ChatMessage{ID: randomID(), PlayerID: p.ID, Name: p.Name, Text: msg.Reaction, Reaction: msg.Reaction, SentAt: time.Now()})
 		if len(room.Chat) > 100 {
 			room.Chat = room.Chat[len(room.Chat)-100:]
 		}
@@ -741,6 +752,9 @@ func (s *Server) applyRoomActionLocked(room *Room, playerID string, msg WSMessag
 		}
 
 	case "rematch":
+		if room.ChallengeRounds > 0 && room.Round >= room.ChallengeRounds {
+			return fmt.Errorf("défi terminé : crée une nouvelle table pour rejouer")
+		}
 		if !room.Finished {
 			return fmt.Errorf("termine la manche avant de lancer une revanche")
 		}
@@ -846,20 +860,22 @@ func (s *Server) broadcast(room *Room) {
 	defer room.broadcastMu.Unlock()
 	room.mu.Lock()
 	view := &RoomView{
-		Code:          room.Code,
-		HostID:        room.HostID,
-		Players:       make([]*Player, 0, len(room.Players)),
-		Chat:          append([]ChatMessage(nil), room.Chat...),
-		CurrentPlayer: room.CurrentPlayer,
-		Dice:          room.Dice,
-		Held:          room.Held,
-		Rolls:         room.Rolls,
-		Started:       room.Started,
-		Finished:      room.Finished,
-		Winner:        room.Winner,
-		MaxPlayers:    room.MaxPlayers,
-		Round:         room.Round,
-		MatchHistory:  append([]MatchResult(nil), room.MatchHistory...),
+		ChallengeRounds: room.ChallengeRounds,
+		Challenge:       room.challengeView(),
+		Code:            room.Code,
+		HostID:          room.HostID,
+		Players:         make([]*Player, 0, len(room.Players)),
+		Chat:            append([]ChatMessage(nil), room.Chat...),
+		CurrentPlayer:   room.CurrentPlayer,
+		Dice:            room.Dice,
+		Held:            room.Held,
+		Rolls:           room.Rolls,
+		Started:         room.Started,
+		Finished:        room.Finished,
+		Winner:          room.Winner,
+		MaxPlayers:      room.MaxPlayers,
+		Round:           room.Round,
+		MatchHistory:    append([]MatchResult(nil), room.MatchHistory...),
 	}
 	for _, p := range room.Players {
 		cp := *p

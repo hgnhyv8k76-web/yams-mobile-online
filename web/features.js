@@ -66,6 +66,7 @@ function renderExtras(){
     }
   }
   renderEvolution();
+  renderChallenge();
 }
 function renderEvolution(){
   const box=$("scoreEvolution");box.innerHTML='';
@@ -107,3 +108,74 @@ function updateAmbientControls(){
 $("ambientBtn").onclick=()=>{gameAudio.setAmbient(!gameAudio.ambientEnabled);updateAmbientControls()};
 $("ambientVolume").addEventListener('input',e=>{gameAudio.setAmbientVolume(e.target.value);updateAmbientControls()});
 applyAppearance();updateAmbientControls();
+
+
+function renderChallenge(){
+  const challenge=state.challenge,card=$("challengeCard");
+  card.classList.toggle('hidden',!challenge);
+  if(!challenge){$("rematchBtn").textContent='🔁 Revanche avec les mêmes joueurs';return;}
+  $("challengeLabel").textContent=`DÉFI EN ${state.challengeRounds} MANCHES`;
+  const names=challenge.standings.filter(p=>challenge.winnerIds.includes(p.playerId)).map(p=>p.name).join(' & ');
+  $("challengeTitle").textContent=challenge.completed ? (challenge.winnerIds.length>1 ? `Égalité finale : ${names}` : `🏆 ${names} remporte le défi`) : `Classement cumulé · ${challenge.completedRounds} / ${state.challengeRounds}`;
+  $("challengeHint").textContent=challenge.completed ? 'Défi terminé. Le total des points détermine le classement final.' : 'Seules les manches terminées entrent dans ce total. Les participants restent les mêmes jusqu’à la fin du défi.';
+  const box=$("challengeStandings");box.innerHTML='';let rank=0;
+  challenge.standings.forEach((p,i)=>{
+    if(i===0 || p.score!==challenge.standings[i-1].score)rank=i+1;
+    const row=document.createElement('div');row.className='rankRow';
+    const name=document.createElement('span'),score=document.createElement('strong');
+    name.textContent=`${rank}. ${p.name} · ${p.wins} manche${p.wins>1?'s':''} gagnée${p.wins>1?'s':''}`;
+    score.textContent=`${p.score} pts`;row.append(name,score);box.appendChild(row);
+  });
+  $("newChallengeBtn").classList.toggle('hidden',!challenge.completed);
+  $("rematchBtn").classList.toggle('hidden',state.hostId!==myId || challenge.completed);
+  $("rematchBtn").textContent=`Préparer la manche ${state.round+1} / ${state.challengeRounds}`;
+}
+$("newChallengeBtn").onclick=()=>backToHome(false);
+
+function showInviteQR(){
+  if(!state)return;
+  const code=state.code;
+  const link=`${location.origin}/?code=${encodeURIComponent(code)}`;
+  const img=$("inviteQR");img.hidden=true;
+  $("qrStatus").textContent='Préparation du QR code…';
+  img.onload=()=>{img.hidden=false;$("qrStatus").textContent=`Code : ${code}`};
+  img.onerror=()=>{$("qrStatus").textContent='QR code indisponible. Utilise le lien ou le code de la partie.'};
+  $("qrLink").href=link;$("qrLink").textContent=link;
+  const local=['localhost','127.0.0.1','[::1]'].includes(location.hostname);
+  $("qrHint").textContent=local ? 'Cette adresse localhost ne fonctionne que sur cet ordinateur. Pour inviter un téléphone, ouvre le jeu avec l’adresse Wi-Fi du Mac ou l’adresse du site public, puis affiche à nouveau le QR code.' : 'Sur un serveur local, les téléphones doivent utiliser le même réseau Wi-Fi. Le code de partie ne donne pas accès à ta session personnelle.';
+  img.src=`/api/invite-qr?code=${encodeURIComponent(code)}&origin=${encodeURIComponent(location.origin)}`;
+  $("qrDialog").showModal();
+}
+$("qrBtn").onclick=showInviteQR;
+let reactionsEnabled=localStorage.getItem('yamsAnimatedReactions')!=='off';
+const reactionTimers=new Set();
+function updateReactionToggle(){
+  $("reactionsToggle").textContent=reactionsEnabled?'Réactions animées activées':'Réactions animées masquées';
+  $("reactionsToggle").setAttribute('aria-pressed',String(reactionsEnabled));
+}
+$("reactionsToggle").onclick=()=>{
+  reactionsEnabled=!reactionsEnabled;localStorage.setItem('yamsAnimatedReactions',reactionsEnabled?'on':'off');
+  document.querySelectorAll('.floatingReaction').forEach(el=>el.remove());
+  reactionTimers.forEach(clearTimeout);reactionTimers.clear();updateReactionToggle();
+};
+function animateReactions(previous,next){
+  if(!reactionsEnabled || !previous || previous.code!==next.code || document.hidden)return;
+  const seen=new Set((previous.chat||[]).map(m=>m.id));
+  for(const msg of (next.chat||[]).filter(m=>m.reaction && !seen.has(m.id)).slice(-6)){
+    if(!['❤️','😂','🎲','👏'].includes(msg.reaction) || Date.now()-Date.parse(msg.sentAt)>5000)continue;
+    const card=[...document.querySelectorAll('#players .player')].find(el=>el.dataset.playerId===msg.playerId);
+    if(!card)continue;
+    const bubble=document.createElement('span');bubble.className='floatingReaction';bubble.textContent=msg.reaction;bubble.setAttribute('aria-hidden','true');
+    card.appendChild(bubble);
+    const timer=setTimeout(()=>{bubble.remove();reactionTimers.delete(timer)},1800);reactionTimers.add(timer);
+  }
+}
+updateReactionToggle();
+$("testSoundBtn").onclick=async()=>{
+  soundEnabled=true;localStorage.setItem('yamsSound','on');gameAudio.setEnabled(true);updateSoundButton();
+  $("audioStatus").textContent='Activation du son…';
+  const result=await gameAudio.test();
+  $("audioStatus").textContent=result==='started' ? 'Test sonore lancé. Si tu n’entends rien, vérifie le volume multimédia du téléphone, le mode silencieux et la sortie Bluetooth.' : result==='zero' ? 'Le volume des effets est à zéro. Augmente le curseur ci-dessous, puis réessaie.' : 'Le navigateur bloque encore le son. Touche à nouveau « Tester / réactiver le son ».';
+};
+
+$("soundTestVolume").addEventListener('input',e=>{gameAudio.setVolume(e.target.value);updateSoundButton()});

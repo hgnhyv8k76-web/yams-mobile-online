@@ -69,3 +69,19 @@ test('result screen gives tied players the same medal', () => {
  assert.match(rows[1].innerHTML,/🥇/);
  assert.match(rows[2].innerHTML,/🥉/);
 });
+
+test('animated reactions skip history, duplicates and disabled effects',()=>{
+ const features=fs.readFileSync(`${__dirname}/web/features.js`,'utf8');
+ const start=features.indexOf('function animateReactions(');
+ const end=features.indexOf('\nupdateReactionToggle();',start);
+ const added=[];
+ const ctx=vm.createContext({reactionsEnabled:true,reactionTimers:new Set(),setTimeout:()=>1,
+  document:{hidden:false,querySelectorAll:()=>[{dataset:{playerId:'a'},appendChild:el=>added.push(el)}],createElement:()=>({setAttribute(){},remove(){}})}
+ });
+ vm.runInContext(features.slice(start,end),ctx);
+ const before={code:'ABCDEF',chat:[]},after={code:'ABCDEF',chat:[{id:'one',playerId:'a',reaction:'👏',sentAt:new Date().toISOString()}]};
+ ctx.animateReactions(null,after);assert.equal(added.length,0);
+ ctx.animateReactions(before,after);assert.equal(added[0].textContent,'👏');
+ ctx.animateReactions(after,after);assert.equal(added.length,1);
+ ctx.reactionsEnabled=false;ctx.animateReactions(before,after);assert.equal(added.length,1);
+});

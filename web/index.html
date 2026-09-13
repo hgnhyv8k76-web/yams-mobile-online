@@ -63,6 +63,9 @@
         <div><strong id="statBest">0</strong><span>meilleur score</span></div><div><strong id="statAvg">0</strong><span>moyenne</span></div>
       </div>
 
+      <label for="challengeRounds">Format de la partie</label>
+      <select id="challengeRounds"><option value="0">Manches libres</option><option value="3">Défi en 3 manches</option><option value="5">Défi en 5 manches</option></select>
+      <p class="hint">En défi, les points des manches s’additionnent pour désigner le vainqueur.</p>
       <div class="grid2">
         <div>
           <label for="maxPlayers">Nombre max.</label>
@@ -101,6 +104,7 @@
         <button id="homeBtn" class="ghost">🏠 Accueil</button>
         <button id="leaveBtn" class="danger">Quitter</button>
         <button id="shareBtn" class="ghost">Partager</button>
+        <button id="qrBtn" class="ghost">QR code</button>
         <button id="copyBtn" class="ghost">Copier le code</button>
         <button id="readyBtn" class="ghost hidden">Je suis prêt</button>
         <button id="startBtn" class="primary hidden">Démarrer</button>
@@ -137,6 +141,7 @@
         <p class="hint center">Un toucher pour garder un dé. Un autre pour le libérer.</p>
       </section>
 
+      <section class="card hidden challengeCard" id="challengeCard"><div class="label" id="challengeLabel"></div><h2 id="challengeTitle"></h2><p id="challengeHint" class="hint"></p><div id="challengeStandings"></div><button class="ghost hidden" id="newChallengeBtn">Créer une nouvelle table</button></section>
       <section class="card hidden" id="historyCard">
         <div class="label">HISTORIQUE DES MANCHES</div>
         <div id="matchHistory" class="matchHistory"></div><div id="scoreEvolution" class="scoreEvolution"></div>
@@ -243,6 +248,7 @@
         <div class="confirmActions"><button class="ghost" value="cancel">Continuer à jouer</button><button class="primary" id="confirmScoreBtn" value="confirm">Valider le score</button></div>
       </form>
     </dialog>
+    <dialog id="qrDialog" aria-labelledby="qrTitle"><form method="dialog"><button class="dialogDismiss ghost">Fermer</button></form><h2 id="qrTitle">Rejoindre la table</h2><p>Scanne ce QR code avec l’appareil photo de ton téléphone.</p><img id="inviteQR" width="288" height="288" alt="QR code d’invitation à la partie"><p id="qrStatus" role="status"></p><a id="qrLink" class="qrLink"></a><p class="hint" id="qrHint"></p></dialog>
     <dialog id="opponentDialog" aria-labelledby="opponentTitle">
       <form method="dialog"><button class="dialogDismiss ghost" aria-label="Fermer la feuille">Fermer</button></form>
       <div class="eyebrow">FEUILLE DU JOUEUR · CONSULTATION</div><h2 id="opponentTitle"></h2>
@@ -261,6 +267,8 @@
       <label for="tableTheme">Thème de la table</label><select id="tableTheme"><option value="green">Tapis vert</option><option value="night">Bleu nuit</option><option value="wood">Bois chaleureux</option></select>
       <label for="diceColor">Couleur des dés</label><select id="diceColor"><option value="ivory">Ivoire</option><option value="sky">Bleu glacier</option><option value="rose">Rose poudré</option></select>
       <div class="themePreview" aria-hidden="true"><span>⚄</span><span>⚂</span><span>⚅</span></div>
+      <button id="testSoundBtn" type="button" class="ghost">Tester / réactiver le son</button><p id="audioStatus" role="status" class="hint"></p><label for="soundTestVolume">Volume des effets du jeu</label><div class="audioSettings"><span aria-hidden="true">♪</span><input id="soundTestVolume" type="range" min="0" max="100" step="5" value="55"><output id="soundTestVolumeValue" for="soundTestVolume">55 %</output></div>
+      <button id="reactionsToggle" type="button" class="ghost" aria-pressed="true">Réactions animées activées</button>
       <button id="ambientBtn" class="ghost" type="button" aria-pressed="false">Activer le fond sonore</button>
       <label for="ambientVolume">Volume du fond sonore</label><div class="audioSettings"><span aria-hidden="true">♫</span><input id="ambientVolume" type="range" min="0" max="100" step="5" value="25"><output id="ambientVolumeValue" for="ambientVolume">25 %</output></div>
       <p class="hint">Accords doux, indépendants des effets du jeu. Le fond sonore s’arrête lorsque la page est masquée.</p>

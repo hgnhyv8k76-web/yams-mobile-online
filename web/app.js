@@ -66,6 +66,7 @@ function connect(callback){
       render();
       maybeAnimateRoll(previousState, state);
       playStateFeedback(previousState, state);
+      animateReactions(previousState,state);
     }
   };
   ws.onclose = () => {
@@ -96,6 +97,7 @@ function createRoom(solo=false){
     avatar:$("avatarInput").value,
     color:$("colorInput").value,
     maxPlayers:Number($("maxPlayers").value),
+    challengeRounds:Number($("challengeRounds").value),
     solo:solo === true, botLevel:$("botLevel").value
   }));
 }
@@ -156,7 +158,7 @@ function render(){
   $("rollBtn").textContent = state.rolls >= 3 ? "Choisis ton score ↓" : state.rolls > 0 ? "Relancer les dés ↻" : "Lancer les dés ↗";
   $("turnCard").classList.toggle("myTurn", isMyTurn && state.started && !state.finished);
   $("rollSteps").querySelectorAll("i").forEach((step,i)=>step.classList.toggle("used",i < state.rolls));
-  $("roomRound").textContent = `Manche ${state.round || 1}`;
+  $("roomRound").textContent = state.challengeRounds ? `Défi · manche ${state.round} / ${state.challengeRounds}` : `Manche ${state.round || 1}`;
   $("roomSlots").textContent = `${state.players.length} / ${state.maxPlayers} joueurs`;
   $("rollBtn").disabled = !state.started || !isMyTurn || state.rolls >= 3 || state.finished || rollingVisual;
 
@@ -171,10 +173,12 @@ function render(){
 
 function renderPlayers(){
   const box = $("players");
+  const floating=[...box.querySelectorAll(".floatingReaction")].map(el=>({id:el.parentElement.dataset.playerId,el}));
   box.innerHTML = "";
   state.players.forEach((p,i) => {
     const total = totalScore(p.scores);
     const div = document.createElement("div");
+    div.dataset.playerId=p.id;
     div.className = "player color-" + (p.color || "blue") + (p.id===myId ? " me":"") + (i===state.currentPlayer && state.started ? " current":"");
     div.innerHTML = `<button type="button" class="playerSheet" aria-label="Consulter la feuille de ${escapeHtml(p.name)}">
       <div>
@@ -190,6 +194,7 @@ function renderPlayers(){
       replace.onclick=()=>offerReplacement(p.id);
       div.appendChild(replace);
     }
+    for(const reaction of floating.filter(item=>item.id===p.id))div.appendChild(reaction.el);
     box.appendChild(div);
   });
 }
@@ -594,6 +599,8 @@ function updateSoundButton(){
     btn.setAttribute("aria-pressed",String(soundEnabled));
     btn.setAttribute("aria-label",soundEnabled ? "Couper les effets sonores" : "Activer les effets sonores");
   }
+  $("soundTestVolume").value=gameAudio.volume;
+  $("soundTestVolumeValue").textContent=`${gameAudio.volume} %`;
   $("soundVolume").value=gameAudio.volume;
   $("soundVolumeValue").textContent=`${gameAudio.volume} %`;
   $("soundVolume").disabled=!soundEnabled;
@@ -706,7 +713,7 @@ function backToHome(clearSession){
   // Important: switch navigation state BEFORE closing the socket.
   // Any late WebSocket packet is therefore ignored.
   onHomeScreen = true;
-  for(const id of ["opponentDialog","replaceDialog","scoreDialog"]){if($(id).open)$(id).close()}
+  for(const id of ["opponentDialog","replaceDialog","scoreDialog","qrDialog"]){if($(id).open)$(id).close()}
   clearTimeout(celebrationTimer);
   $("celebration").classList.add("hidden");
   $("rollFlash").classList.add("hidden");
@@ -744,8 +751,8 @@ function resumeGame(){
 }
 
 function leaveGame(){
-  if(state?.started){
-    toast("Manche en cours : utilise Accueil pour pouvoir la reprendre.");
+  if(state?.started || (state?.challengeRounds && state.matchHistory?.length && !state.challenge?.completed)){
+    toast("Partie ou défi en cours : utilise Accueil pour pouvoir reprendre ta place.");
     return;
   }
   const ok = confirm("Quitter cette partie définitivement et revenir à l'accueil ?");
