@@ -13,3 +13,15 @@ Refonte graphique : vert profond, ivoire, laiton, typographie de caractère et d
 Vérifications : accueil et partie inspectés dans le navigateur sur ordinateur et au format mobile 390 × 844 ; partie à deux joueurs, lancer, dé gardé, validation de 10 points et passage de tour. Aucun message d’erreur JavaScript dans la session finale. Les quatre tests JavaScript existants passent.
 
 Les fichiers web étant intégrés au binaire Go, relancer/recompiler le serveur pour charger cette version. Le cache PWA porte un nouveau nom. Aucun déploiement en ligne effectué.
+
+
+## V12 — Retours visuels et sonores
+
+- Table active soulignée d’or, repères des trois lancers, progression individuelle et avatars encadrés.
+- Dés gardés identifiés par une coche, scores possibles plus contrastés et retour visuel après validation.
+- Bruit de lancer composé de petits impacts filtrés ; notes distinctes pour garder/libérer un dé, valider un score, commencer son tour et célébrer une victoire.
+- Moteur Web Audio unique, activé par un geste utilisateur, avec volume mémorisé et coupure immédiate. Les effets sont silencieux lorsque la page est masquée. Aucun fichier audio externe.
+- Les animations JavaScript des dés et les confettis respectent la préférence de réduction des mouvements. Les célébrations ne se rejouent plus sur la seule lecture d’un ancien message de chat.
+- Champs mobiles à 16 px pour éviter le zoom automatique de saisie.
+
+Validation : compilation Go, 10 tests JavaScript, contrôle de syntaxe des trois scripts et contrôle du diff. Parcours réel dans le navigateur à deux joueurs : préparation, lancer, dé gardé, mode muet, volume, validation de 15 points et changement de tour. Rendu inspecté à 1280 px et 390 px, sans débordement horizontal ni erreur console. Qualité sonore perceptive sur téléphone physique non évaluée.

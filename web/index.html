@@ -109,13 +109,13 @@
         <div class="players" id="players"></div>
       </section>
 
-      <section class="turn card">
+      <section class="turn card" id="turnCard">
         <div class="turnTop">
           <div>
             <div class="label" id="turnLabel">AUTOUR DE LA TABLE</div>
             <h2 id="turnName">En attente…</h2>
           </div>
-          <div class="rollIndicator"><div class="rollCount" id="rollCount">0 / 3</div><span>LANCERS</span></div>
+          <div class="rollIndicator"><div class="rollCount" id="rollCount">0 / 3</div><span>LANCERS</span><div class="rollSteps" id="rollSteps" aria-hidden="true"><i></i><i></i><i></i></div></div>
         </div>
 
         <p class="turnGuidance" id="turnGuidance" aria-live="polite">La table vous attend.</p>
@@ -128,6 +128,7 @@
           <button class="primary roll" id="rollBtn">🎲 LANCER LES DÉS</button>
           <button class="ghost soundToggle" id="soundBtn" title="Activer ou couper le son">🔊 Son</button>
         </div>
+        <div class="audioSettings"><label for="soundVolume">Volume des effets</label><input id="soundVolume" type="range" min="0" max="100" step="5" value="55"><output id="soundVolumeValue" for="soundVolume">55 %</output></div>
         <p class="hint center">Un toucher pour garder un dé. Un autre pour le libérer.</p>
       </section>
 
@@ -244,6 +245,7 @@
 
   <footer class="siteFooter">Une dernière partie ? <span>Yam’s Sandra d’amour · Créé par <strong>Loïc Bordier</strong> · 2026</span></footer>
 
+  <script src="/audio.js"></script>
   <script src="/app.js"></script>
 </body>
 </html>

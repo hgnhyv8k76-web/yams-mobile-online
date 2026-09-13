@@ -21,3 +21,45 @@ button,input,select{font:inherit}button{cursor:pointer}button,a,input,select,[ro
 
 /* Confirmation intégrée à la table */
 .scoreConfirm{text-align:center}.scoreConfirm .eyebrow{color:#8a927d;font-size:8px;margin:8px 0 20px}.scoreConfirm h2{font-size:34px}.scoreConfirmValue{font:42px Georgia,serif;color:#5b7749;margin:20px 0}.scoreConfirm p{font-size:12px;color:#79846e;line-height:1.8}.confirmActions{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:25px}.confirmActions .ghost{color:#506746;border-color:#cbd2be}.player.color-blue{border-left:3px solid #89adb9}.player.color-pink{border-left:3px solid #d7a8b6}.player.color-green{border-left:3px solid #9abd88}.player.color-gold{border-left:3px solid #d6b979}.player.color-purple{border-left:3px solid #b2a0c9}.player.color-orange{border-left:3px solid #d6a477}
+
+/* Édition V12 : une table plus lisible, des retours discrets. */
+:root{--muted:#bbcbc0}
+.heroArt:before{content:"";position:absolute;inset:15% 5%;background:radial-gradient(ellipse,#e5bc731b,transparent 65%);border-radius:50%}
+.lobbyPanel{border-top:4px solid #c4a46b}
+.player{transition:border-color .25s,background .25s;position:relative}
+.playerAvatar{display:inline-grid;place-items:center;width:30px;height:30px;background:#ffffff0b;border:1px solid #ffffff14;border-radius:10px;vertical-align:middle}
+.player.current{background:linear-gradient(120deg,#49644288,#244e37);border-color:#e5bc7399;box-shadow:0 0 0 1px #e5bc7312}
+.playerProgress{height:3px;border-radius:8px;background:#ffffff12;margin-top:10px;overflow:hidden}
+.playerProgress>span{display:block;height:100%;background:linear-gradient(90deg,#a7c995,#e5bc73);border-radius:inherit;transition:width .4s}
+.turn{transition:border-color .3s,box-shadow .3s}
+.turn.myTurn{border-color:#e5bc7399;box-shadow:0 8px 35px #051f2850,0 0 35px #e5bc730a}
+.turn.myTurn #turnLabel:before{content:"";display:inline-block;width:6px;height:6px;background:var(--gold);border-radius:50%;margin-right:8px;box-shadow:0 0 10px #e5bc7366}
+.turnGuidance{font-size:12px;color:#c0d0c1}
+.rollSteps{display:flex;gap:5px;justify-content:center;margin-top:8px}
+.rollSteps i{width:16px;height:4px;border-radius:5px;background:#ffffff20;transition:background .25s}
+.rollSteps i.used{background:var(--gold)}
+.diceStage:before{content:"";position:absolute;inset:10px -8px 8px;background:radial-gradient(ellipse,#426a4540,transparent 75%);border:1px solid #d3c48a12;border-radius:50%}
+.die.held:after{content:"✓ GARDÉ";font-size:8px;letter-spacing:.6px;white-space:nowrap}
+.audioSettings{display:grid;grid-template-columns:auto minmax(60px,1fr) 38px;gap:12px;align-items:center;margin-top:17px}
+.audioSettings label{margin:0;font-size:10px;font-weight:400}
+.audioSettings input{appearance:auto;accent-color:var(--gold);padding:0;background:none;border:0;min-height:32px;height:32px;cursor:pointer}
+.audioSettings input:disabled{opacity:.35;cursor:default}
+.audioSettings output{font-size:10px;color:var(--muted);text-align:right;font-variant-numeric:tabular-nums}
+.soundToggle[aria-pressed=false]{color:var(--muted);background:#0001}
+.scoreColumns{color:#626f59;font-size:9px}
+.scoreRow{transition:background .16s,border-color .16s}
+.scoreRow.available .scorePotential{background:#d7e3c8;color:#33552d;border:1px solid #b9cba6}
+.scoreRow.available:hover .scorePotential{background:#315c41;color:#fff7e8;border-color:#315c41}
+.scoreRow.used .scoreValue{color:#43583b}
+.scoreRow.used .categoryIcon{opacity:.65}
+#scoreTable.scoreUpdated{animation:scoreGlow .7s ease}
+#resultCard{border-color:#e5bc7360;background:radial-gradient(ellipse at top,#e5bc7314,transparent 70%),#193b31}
+.resultTitle{line-height:1.35}
+.rankRow{font-variant-numeric:tabular-nums}
+.rankRow strong{color:var(--gold)}
+.chatMessages{overscroll-behavior:contain;scrollbar-color:#58725d transparent}
+.primary:active:not(:disabled),.reactionBtn:active{transform:translateY(1px) scale(.98)}
+@keyframes scoreGlow{0%{background-color:#e5bc7340}100%{background-color:transparent}}
+@media(hover:hover){.die:not(.held):not(.rolling)[aria-disabled=false]:hover{transform:translateY(-5px) rotate(0deg);box-shadow:inset 3px 3px 4px #fff9,0 4px 0 #b6ab90,0 7px 0 #8b8169,0 20px 25px #0005}.card:not(.turn):not(.scoreCard):not(.lobbyPanel){transition:border-color .2s}}
+@media(max-width:760px){input,select,.chatForm input{font-size:16px}.audioSettings{gap:9px}.turnGuidance{font-size:12px}.playerMeta{font-size:10px}.die.held:after{font-size:7px}.scoreColumns{font-size:9px}}
+@media(prefers-reduced-motion:reduce){.confettiLayer{display:none}.celebration{background:#173b31d9}.celebrationText{font-size:clamp(48px,12vw,100px)}}

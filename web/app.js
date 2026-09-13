@@ -23,7 +23,8 @@ let rollAnimationToken = 0;
 let soundEnabled = localStorage.getItem("yamsSound") !== "off";
 let reconnectAttempts = 0;
 let reconnectTimer = null;
-let lastCelebratedChatId = "";
+let celebrationTimer = null;
+const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)");
 const MOBILE_DICE_MODE = window.matchMedia("(max-width: 700px), (pointer: coarse)").matches;
 
 $("nameInput").value = myName;
@@ -64,7 +65,7 @@ function connect(callback){
       localStorage.setItem("yamsRoomCode", roomCode);
       render();
       maybeAnimateRoll(previousState, state);
-      maybeCelebrateYams();
+      playStateFeedback(previousState, state);
     }
   };
   ws.onclose = () => {
@@ -152,9 +153,11 @@ function render(){
   $("turnLabel").textContent = state.finished ? "LA BELLE VICTOIRE" : !state.started ? "AUTOUR DE LA TABLE" : isMyTurn ? "À TOI DE JOUER" : "À SON TOUR";
   $("turnGuidance").textContent = state.finished ? "Bravo à toute la table. On remet ça ?" : !state.started ? "Tout le monde est là ? Chaque joueur doit se déclarer prêt." : isMyTurn ? (state.rolls === 0 ? "À toi de faire parler les dés." : state.rolls >= 3 ? "Dernier lancer effectué. Choisis une case sur ta feuille." : "Garde les dés qui te plaisent, relance les autres ou marque tes points.") : `${current?.name || "Un joueur"} prépare son prochain coup. À toi bientôt !`;
   $("rollBtn").textContent = state.rolls >= 3 ? "Choisis ton score ↓" : state.rolls > 0 ? "Relancer les dés ↻" : "Lancer les dés ↗";
+  $("turnCard").classList.toggle("myTurn", isMyTurn && state.started && !state.finished);
+  $("rollSteps").querySelectorAll("i").forEach((step,i)=>step.classList.toggle("used",i < state.rolls));
   $("roomRound").textContent = `Manche ${state.round || 1}`;
   $("roomSlots").textContent = `${state.players.length} / ${state.maxPlayers} joueurs`;
-  $("rollBtn").disabled = !state.started || !isMyTurn || state.rolls >= 3 || state.finished;
+  $("rollBtn").disabled = !state.started || !isMyTurn || state.rolls >= 3 || state.finished || rollingVisual;
 
   renderPlayers();
   renderDice(isMyTurn);
@@ -174,7 +177,8 @@ function renderPlayers(){
     div.innerHTML = `
       <div>
         <div class="playerName"><span class="playerAvatar">${escapeHtml(p.avatar || "🎲")}</span><span class="online ${p.online?"":"offline"}"></span>${escapeHtml(p.name)} ${p.id===state.hostId?"👑":""}</div>
-        <div class="playerMeta">${Object.keys(p.scores).length}/13 cases • <span class="${p.ready ? "readyBadge" : "notReadyBadge"}">${p.ready ? "prêt" : "pas prêt"}</span></div>
+        <div class="playerMeta">${Object.keys(p.scores).length}/13 cases • <span class="${p.ready ? "readyBadge" : "notReadyBadge"}">${state.started ? (i===state.currentPlayer ? "à son tour" : "en jeu") : p.ready ? "prêt" : "pas prêt"}</span></div>
+        <div class="playerProgress" aria-hidden="true"><span style="width:${Object.keys(p.scores).length/13*100}%"></span></div>
       </div>
       <strong>${total} pts</strong>`;
     box.appendChild(div);
@@ -231,6 +235,8 @@ function maybeAnimateRoll(previous,next){
 }
 
 function animateDiceRoll(finalDice,held){
+  playDiceSound();
+  if(reducedMotion.matches) return;
   const diceEls=[...document.querySelectorAll("#dice .die")];
   if(!diceEls.length) return;
 
@@ -245,7 +251,6 @@ function animateDiceRoll(finalDice,held){
     requestAnimationFrame(()=>flash.classList.remove("hidden"));
   }
 
-  playDiceSound();
   if(navigator.vibrate) navigator.vibrate(MOBILE_DICE_MODE ? 12 : [18,22,16]);
 
   diceEls.forEach((el,i)=>{
@@ -574,36 +579,41 @@ function setConnectionStatus(mode){
 
 function updateSoundButton(){
   const btn=$("soundBtn");
-  if(btn) btn.textContent=soundEnabled ? "🔊 Son" : "🔇 Muet";
+  if(btn){
+    btn.textContent=soundEnabled ? "🔊 Son" : "🔇 Muet";
+    btn.setAttribute("aria-pressed",String(soundEnabled));
+    btn.setAttribute("aria-label",soundEnabled ? "Couper les effets sonores" : "Activer les effets sonores");
+  }
+  $("soundVolume").value=gameAudio.volume;
+  $("soundVolumeValue").textContent=`${gameAudio.volume} %`;
+  $("soundVolume").disabled=!soundEnabled;
 }
 
-function playDiceSound(){
-  if(!soundEnabled) return;
-  try{
-    const AC=window.AudioContext||window.webkitAudioContext;
-    if(!AC) return;
-    const ctx=new AC();
-    const now=ctx.currentTime;
-    for(let i=0;i<(MOBILE_DICE_MODE?3:6);i++){
-      const osc=ctx.createOscillator(), gain=ctx.createGain();
-      osc.type="triangle";
-      osc.frequency.setValueAtTime(125+Math.random()*150,now+i*.045);
-      gain.gain.setValueAtTime(.0001,now+i*.045);
-      gain.gain.exponentialRampToValueAtTime(.055,now+i*.045+.006);
-      gain.gain.exponentialRampToValueAtTime(.0001,now+i*.045+.035);
-      osc.connect(gain); gain.connect(ctx.destination);
-      osc.start(now+i*.045); osc.stop(now+i*.045+.045);
-    }
-    setTimeout(()=>ctx.close().catch(()=>{}),700);
-  }catch(_){}
-}
+function playDiceSound(){ gameAudio.play("roll"); }
 
-function maybeCelebrateYams(){
-  const messages=Array.isArray(state?.chat)?state.chat:[];
-  const last=[...messages].reverse().find(m=>String(m.text||"").includes("vient de faire un Yams"));
-  if(!last || last.id===lastCelebratedChatId) return;
-  lastCelebratedChatId=last.id;
-  showCelebration("YAMS !");
+function playStateFeedback(previous,next){
+  if(!previous || previous.code !== next.code || previous.round !== next.round) return;
+  const scored = next.players.some(p => {
+    const before=previous.players.find(old=>old.id===p.id);
+    return before && Object.keys(p.scores).length > Object.keys(before.scores).length;
+  });
+  const yams = next.players.some(p => p.scores.Yams === 50 && previous.players.find(old=>old.id===p.id)?.scores.Yams !== 50);
+  if(yams) showCelebration("YAMS !");
+  else if(next.finished && !previous.finished) showCelebration("Bravo !");
+  else if(next.started && next.players[next.currentPlayer]?.id===myId && (!previous.started || previous.players[previous.currentPlayer]?.id!==myId)) {
+    gameAudio.play("turn");
+    toast("À toi de jouer !");
+  } else if(scored) gameAudio.play("score");
+  else if(next.rolls===previous.rolls && next.currentPlayer===previous.currentPlayer && next.started) {
+    const changed=next.held.findIndex((held,i)=>held!==previous.held[i]);
+    if(changed>=0) gameAudio.play(next.held[changed] ? "hold" : "release");
+  }
+  if(scored) {
+    const card=$("scoreTable");
+    card.classList.remove("scoreUpdated");
+    void card.offsetWidth;
+    card.classList.add("scoreUpdated");
+  }
 }
 
 function showCelebration(text){
@@ -611,7 +621,7 @@ function showCelebration(text){
   if(!layer||!overlay) return;
   $("celebrationText").textContent=text;
   layer.innerHTML="";
-  for(let i=0;i<48;i++){
+  for(let i=0;i<(reducedMotion.matches ? 0 : MOBILE_DICE_MODE ? 20 : 40);i++){
     const c=document.createElement("i");
     c.className="confetti";
     c.style.left=`${Math.random()*100}%`;
@@ -623,21 +633,11 @@ function showCelebration(text){
   }
   overlay.classList.remove("hidden");
   if(soundEnabled) playVictoryChime();
-  setTimeout(()=>overlay.classList.add("hidden"),2700);
+  clearTimeout(celebrationTimer);
+  celebrationTimer=setTimeout(()=>overlay.classList.add("hidden"),2700);
 }
 
-function playVictoryChime(){
-  try{
-    const AC=window.AudioContext||window.webkitAudioContext;
-    if(!AC) return;
-    const ctx=new AC(), notes=[523.25,659.25,783.99,1046.5];
-    notes.forEach((freq,i)=>{
-      const o=ctx.createOscillator(),g=ctx.createGain(),t=ctx.currentTime+i*.09;
-      o.type="sine";o.frequency.value=freq;g.gain.setValueAtTime(.0001,t);g.gain.exponentialRampToValueAtTime(.09,t+.015);g.gain.exponentialRampToValueAtTime(.0001,t+.28);o.connect(g);g.connect(ctx.destination);o.start(t);o.stop(t+.3);
-    });
-    setTimeout(()=>ctx.close().catch(()=>{}),900);
-  }catch(_){}
-}
+function playVictoryChime(){ gameAudio.play("victory"); }
 
 async function showLeaderboard(){
   const box = $("leaderboard");
@@ -696,6 +696,9 @@ function backToHome(clearSession){
   // Important: switch navigation state BEFORE closing the socket.
   // Any late WebSocket packet is therefore ignored.
   onHomeScreen = true;
+  clearTimeout(celebrationTimer);
+  $("celebration").classList.add("hidden");
+  $("rollFlash").classList.add("hidden");
   disconnectSocket();
   state = null;
 
@@ -740,6 +743,8 @@ function leaveGame(){
 }
 
 
+$("soundVolume").addEventListener("input",e=>{gameAudio.setVolume(e.target.value);updateSoundButton()});
+$("soundVolume").addEventListener("change",()=>gameAudio.play("ready"));
 $("createBtn").onclick = createRoom;
 $("joinBtn").onclick = joinRoom;
 $("homeBtn").onclick = () => backToHome(false);
@@ -747,7 +752,7 @@ $("leaveBtn").onclick = leaveGame;
 $("resumeBtn").onclick = resumeGame;
 $("startBtn").onclick = () => send({type:"start"});
 $("rollBtn").onclick = () => { if(!rollingVisual) send({type:"roll"}); };
-$("soundBtn").onclick = () => { soundEnabled=!soundEnabled; localStorage.setItem("yamsSound",soundEnabled?"on":"off"); updateSoundButton(); toast(soundEnabled?"Son activé":"Son coupé"); };
+$("soundBtn").onclick = () => { soundEnabled=!soundEnabled; localStorage.setItem("yamsSound",soundEnabled?"on":"off"); gameAudio.setEnabled(soundEnabled); updateSoundButton(); if(soundEnabled) gameAudio.play("ready"); toast(soundEnabled?"Son activé":"Son coupé"); };
 $("rulesBtn").onclick = () => $("rulesModal").classList.remove("hidden");
 $("rulesClose").onclick = () => $("rulesModal").classList.add("hidden");
 $("rulesOk").onclick = () => $("rulesModal").classList.add("hidden");
